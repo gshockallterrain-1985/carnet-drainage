@@ -1,0 +1,2189 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carnet de drainage</title>
+<meta name="description" content="Fiches clients, questionnaires de santé, suivi des séances et factures. Les données restent sur tes appareils.">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2A7570" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#102627" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet">
+<style>
+/* Couleurs de l'identité visuelle : pétrole #0F3A3C, lagon #2A7570, eau claire #BFDCD8, brume #EEF5F4 */
+:root{
+  --fond:#EEF5F4;
+  --papier:#FFFFFF;
+  --papier-2:#E4EFED;
+  --encre:#0F3A3C;
+  --encre-2:#3C5F60;
+  --encre-3:#4B6969;
+  --trait:#BFDCD8;
+  --lagon:#2A7570;
+  --lagon-fort:#1C5753;
+  --lagon-clair:#D3E8E5;
+  --sur-lagon:#FFFFFF;
+  --zone:#D9EAE7;
+  --zone-trait:#8DB7B2;
+  --alerte:#9C3826;
+  --alerte-fond:#F5E1DB;
+  --veille:#84600E;
+  --veille-fond:#F4EAD2;
+  --ok:#2F6B45;
+  --focus:#2A7570;
+  --serif:'Palatino Linotype','Book Antiqua',Palatino,'URW Palladio L',P052,Georgia,serif;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --fond:#0A1C1D; --papier:#102627; --papier-2:#153031; --encre:#E3F0EE; --encre-2:#A6C4C0; --encre-3:#86A8A4;
+    --trait:#244241; --lagon:#79C0B8; --lagon-fort:#A3D9D2; --lagon-clair:#1A3E3C; --sur-lagon:#06201F;
+    --zone:#1D3B3A; --zone-trait:#4A716C; --alerte:#EE9580; --alerte-fond:#3A2420; --veille:#E2B75E; --veille-fond:#332916;
+    --ok:#7CC394; --focus:#A3D9D2; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--fond);color:var(--encre);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--lagon-fort)}
+h1,h2,h3{margin:0}
+p{margin:0 0 10px}
+[hidden]{display:none!important}
+
+/* Structure */
+.app{display:grid;grid-template-columns:292px minmax(0,1fr);height:100vh;height:100dvh}
+.barre{display:flex;flex-direction:column;min-height:0;background:var(--papier-2);border-right:1px solid var(--trait)}
+.barre-tete{padding:20px 16px 12px;display:grid;gap:10px}
+.marque{font-family:var(--serif);font-size:23px;line-height:1.15;margin:0}
+.liste{list-style:none;margin:0;padding:4px 8px 12px;overflow:auto;flex:1;min-height:0}
+.liste li a{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;padding:9px 10px;border-radius:7px;color:inherit;text-decoration:none}
+.liste li a:hover{background:var(--papier)}
+.liste li a[aria-current="page"]{background:var(--papier);box-shadow:inset 3px 0 0 var(--lagon)}
+.nom-liste{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.liste .sous{grid-column:1/-1}
+.liste-vide{padding:12px 10px;color:var(--encre-3);font-size:14px}
+.pastille{align-self:center;display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-size:12px;font-weight:700;background:var(--alerte);color:var(--papier)}
+.pastille.orange{background:var(--veille)}
+.sous{font-size:13px;color:var(--encre-3)}
+.pied{border-top:1px solid var(--trait);padding:12px 16px 16px;display:grid;gap:6px}
+.statut{margin:0;font-size:13px;display:flex;align-items:center;gap:7px;color:var(--encre-2)}
+.statut::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.statut.erreur{color:var(--alerte)}
+.statut.erreur::before{background:var(--alerte)}
+.statut.attente::before{background:var(--encre-3)}
+#sauvegardeInfo{margin:0}
+#sauvegardeInfo.retard{color:var(--veille)}
+.principal{overflow:auto;min-height:0;outline:none}
+.page{max-width:900px;margin:0 auto;padding:30px 36px 72px}
+
+/* En-tête de fiche */
+.tete{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 20px}
+.fiche-nom{font-family:var(--serif);font-weight:normal;font-size:36px;line-height:1.1}
+.meta{display:flex;flex-wrap:wrap;gap:4px 20px;margin-top:8px;color:var(--encre-2)}
+.meta a{color:var(--lagon-fort);text-decoration:none;border-bottom:1px solid var(--lagon-clair)}
+.meta a:hover{border-bottom-color:var(--lagon)}
+.retour{display:none;margin:0 0 8px -6px}
+.onglets{display:flex;gap:2px;border-bottom:1px solid var(--trait);margin:24px 0 26px;overflow-x:auto;scrollbar-width:none}
+.onglets a{padding:10px 14px 9px;color:var(--encre-2);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.onglets a:hover{color:var(--encre)}
+.onglets a[aria-current="page"]{color:var(--encre);border-bottom-color:var(--lagon);font-weight:600}
+
+/* Blocs */
+.bloc{margin:0 0 30px}
+.titre-bloc{font-family:var(--serif);font-weight:normal;font-size:22px;line-height:1.25;margin:0 0 12px}
+.titre-ligne{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px 16px;margin-bottom:14px}
+.titre-ligne .titre-bloc{margin:0}
+.sous-titre{font-size:15px;font-weight:600;margin:24px 0 6px}
+.aide{color:var(--encre-2);font-size:14px;max-width:68ch}
+.vide{border:1px dashed var(--zone-trait);border-radius:10px;padding:22px;color:var(--encre-2)}
+.vide p{max-width:60ch}
+
+/* Formulaires */
+.grille{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+.grille.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.grille.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.champ{display:flex;flex-direction:column;gap:5px;min-width:0}
+.champ.large{grid-column:1/-1}
+.champ > label,.etiquette{font-size:13px;color:var(--encre-2)}
+.lbl-ligne{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px;color:var(--encre-2)}
+.liens-contact{display:flex;gap:12px}
+.liens-contact a{text-decoration:none;font-weight:600}
+.liens-contact a:hover{text-decoration:underline}
+input[type=text],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=search],select,textarea{font:inherit;color:inherit;background:var(--papier);border:1px solid var(--trait);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+input::placeholder,textarea::placeholder{color:var(--encre-3)}
+textarea{min-height:72px;resize:vertical;line-height:1.45}
+input:hover,select:hover,textarea:hover{border-color:var(--zone-trait)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline-offset:0;border-color:var(--lagon)}
+fieldset{border:0;padding:0;margin:0 0 26px;min-width:0}
+legend{font-family:var(--serif);font-size:19px;padding:0;margin-bottom:10px}
+.case{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.case input{margin-top:3px;width:17px;height:17px;accent-color:var(--lagon);flex:none}
+.erreur-form{color:var(--alerte);font-size:14px;margin:8px 0 0}
+
+/* Boutons */
+.btn{font:inherit;font-size:14px;line-height:1.2;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:6px;border:1px solid var(--trait);background:var(--papier);color:var(--encre);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--zone-trait);background:var(--papier-2)}
+.btn-plein{background:var(--lagon);border-color:var(--lagon);color:var(--sur-lagon)}
+.btn-plein:hover{background:var(--lagon-fort);border-color:var(--lagon-fort)}
+.btn.discret{background:transparent;border-color:transparent;color:var(--lagon-fort)}
+.btn.danger{background:transparent;border-color:transparent;color:var(--alerte)}
+.btn.danger:hover{background:var(--alerte-fond)}
+.btn.petit{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.large-btn{width:100%}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lien{font:inherit;background:none;border:0;padding:0;color:var(--lagon-fort);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* Alertes */
+.alerte{border-left:3px solid var(--alerte);background:var(--alerte-fond);padding:10px 14px;border-radius:0 7px 7px 0;margin-top:12px}
+.alerte > strong{display:block;color:var(--alerte);font-weight:600}
+.alerte.orange{border-left-color:var(--veille);background:var(--veille-fond)}
+.alerte.orange > strong{color:var(--veille)}
+.alerte ul{margin:4px 0 0;padding-left:18px}
+.alerte p{margin:4px 0 0;white-space:pre-line}
+
+/* Questionnaire */
+.q-section{margin:0 0 30px}
+.q-section > legend{display:flex;gap:10px;align-items:baseline}
+.q-num{font-family:var(--serif);color:var(--lagon-fort)}
+.q-question{padding:12px 0;border-top:1px solid var(--trait)}
+.q-label{display:block;margin-bottom:8px}
+.cases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 20px}
+.cases label{display:flex;gap:9px;align-items:flex-start;cursor:pointer;padding:3px 0}
+.cases input{margin-top:3px;width:17px;height:17px;accent-color:var(--lagon);flex:none}
+.cases input[data-niveau="rouge"]:checked + span{color:var(--alerte);font-weight:600}
+.cases input[data-niveau="orange"]:checked + span{color:var(--veille);font-weight:600}
+.segment{display:inline-flex;flex-wrap:wrap;border:1px solid var(--trait);border-radius:7px;overflow:hidden;background:var(--papier)}
+.segment input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.segment label{padding:6px 14px;cursor:pointer;color:var(--encre-2);border-right:1px solid var(--trait)}
+.segment label:last-of-type{border-right:0}
+.segment input:checked + label{background:var(--lagon);color:var(--sur-lagon)}
+.segment input[data-niveau="rouge"]:checked + label{background:var(--alerte);color:var(--papier)}
+.segment input[data-niveau="orange"]:checked + label{background:var(--veille);color:var(--papier)}
+.segment input:focus-visible + label{outline:2px solid var(--focus);outline-offset:-2px}
+.precisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 14px;margin-top:10px}
+.annexe{background:var(--papier-2);border-radius:8px;padding:14px 18px;font-size:14px;margin-bottom:14px}
+.annexe ul{margin:4px 0 10px;padding-left:20px}
+.repris{display:flex;flex-wrap:wrap;gap:4px 22px;font-size:14px;color:var(--encre-2)}
+.repris .manque{color:var(--veille)}
+.reponses{margin:0}
+.rep{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:4px 18px;padding:9px 0;border-top:1px solid var(--trait)}
+.rep.plein{grid-template-columns:minmax(0,1fr)}
+.rep dt{color:var(--encre-2)}
+.rep dd{margin:0}
+.puces{display:flex;flex-wrap:wrap;gap:6px}
+.puce{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--lagon-clair);font-size:13.5px}
+.puce.rouge{background:var(--alerte-fond);color:var(--alerte);font-weight:600}
+.puce.orange{background:var(--veille-fond);color:var(--veille);font-weight:600}
+.sous-rep{font-size:14px;margin-top:3px}
+.non-rens{color:var(--encre-3)}
+.engag{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.engag .manque{color:var(--veille)}
+.historique{list-style:none;padding:0;margin:0}
+.historique li{padding:5px 0}
+.encadre{background:var(--papier);border:1px solid var(--trait);border-radius:10px;padding:12px 16px;margin:0 0 22px;max-width:72ch}
+.encadre > strong{display:block;margin-bottom:2px}
+.encadre p{margin:0}
+.q-section > .aide{margin:-4px 0 6px}
+.q-question.compact{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 18px;align-items:center}
+.q-question.compact .q-label{margin:0}
+.q-question.compact .precisions{grid-column:1/-1;margin-top:2px}
+.q-question:not(:has(input[value="oui"]:checked)) .precisions.si-oui{display:none}
+.texte-long{white-space:pre-line}
+.badge-modele{display:inline-block;font-family:var(--sans);font-size:12.5px;padding:1px 9px;border-radius:999px;background:var(--lagon-clair);color:var(--lagon-fort);font-weight:600;vertical-align:2px;margin-left:8px;white-space:nowrap}
+.non-liste{color:var(--encre-2);font-size:14px}
+.non-liste.manque{color:var(--veille)}
+
+/* Séances */
+.seances{list-style:none;margin:0;padding:0}
+.seance{font:inherit;color:inherit;background:none;border:0;border-top:1px solid var(--trait);text-align:left;display:grid;grid-template-columns:64px minmax(0,1fr);gap:18px;width:100%;padding:16px 8px 16px 0;cursor:pointer}
+.seance:hover .seance-titre{color:var(--lagon-fort)}
+.date-rail{text-align:right}
+.jour{display:block;font-family:var(--serif);font-size:30px;line-height:1}
+.mois{display:block;font-size:12.5px;color:var(--encre-2);margin-top:3px}
+.seance-corps{display:grid;gap:3px;min-width:0}
+.seance-titre{font-weight:600}
+.extrait{color:var(--encre-2);font-size:14px}
+.note-alerte{color:var(--alerte);font-size:14px}
+.badge{display:inline-block;font-size:12.5px;padding:1px 8px;border-radius:999px;border:1px solid var(--trait);color:var(--encre-2);margin-left:8px;font-weight:normal;vertical-align:1px}
+.carte-corps{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px 26px;align-items:start}
+.corps{width:100%;height:auto;display:block}
+.corps .neutre{fill:var(--papier-2);stroke:var(--zone-trait);stroke-width:1}
+.corps .zone{fill:var(--zone);stroke:var(--zone-trait);stroke-width:1;cursor:pointer;transition:fill .12s}
+.corps .zone:hover{fill:var(--lagon-clair)}
+.corps .zone[aria-pressed="true"]{fill:var(--lagon);stroke:var(--lagon-fort)}
+.corps .zone:focus{outline:none}
+.corps .zone:focus-visible{stroke:var(--encre);stroke-width:2.5}
+.corps .num{font:600 12px var(--sans);fill:var(--encre-2);pointer-events:none;text-anchor:middle}
+.corps .num.on{fill:var(--sur-lagon)}
+.corps .cote{font:12px var(--sans);fill:var(--encre-3);text-anchor:middle}
+.corps .legende{font:13px var(--sans);fill:var(--encre-2);text-anchor:middle}
+.ordre{margin:0;padding-left:20px;font-size:14px;color:var(--encre-2)}
+.ordre li.on{color:var(--encre);font-weight:600}
+.mesures{border-collapse:collapse;width:100%;max-width:520px}
+.mesures th,.mesures td{padding:5px 10px 5px 0;text-align:left;font-weight:normal;border-bottom:1px solid var(--trait)}
+.mesures thead th{font-size:13px;color:var(--encre-2)}
+.mesures input{max-width:100px}
+details.bloc > summary{cursor:pointer;font-family:var(--serif);font-size:19px;margin-bottom:10px}
+
+/* Graphique */
+.graph-zone{position:relative;background:var(--papier);border:1px solid var(--trait);border-radius:10px;padding:14px 16px 12px;margin-bottom:28px}
+.graph-tete{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.graph-tete select{width:auto}
+.graph{width:100%;height:auto;display:block}
+.graph .g-grille{stroke:var(--trait);stroke-width:1}
+.graph .g-axe{font:12px var(--sans);fill:var(--encre-3)}
+.graph .g-ligne{fill:none;stroke:var(--lagon);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.graph .g-lien{stroke:var(--zone-trait);stroke-width:1.5;stroke-dasharray:2 3}
+.graph .g-avant{fill:var(--lagon);stroke:var(--papier);stroke-width:2}
+.graph .g-apres{fill:var(--papier);stroke:var(--lagon);stroke-width:2}
+.graph .g-cible{fill:transparent}
+.graph .g-cible:focus{outline:none}
+.graph .g-cible:focus-visible{stroke:var(--focus);stroke-width:2}
+.infobulle{position:absolute;pointer-events:none;background:var(--encre);color:var(--papier);font-size:13px;padding:6px 9px;border-radius:6px;white-space:nowrap;transform:translate(-50%,calc(-100% - 12px));z-index:2}
+.legende-graph{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--encre-2);align-items:center}
+.legende-graph svg{vertical-align:-1px;margin-right:5px}
+.resume-graph{font-size:14px;color:var(--encre-2);margin:2px 0 6px}
+.valeurs summary{cursor:pointer;font-size:13px;color:var(--lagon-fort);margin-top:6px}
+.valeurs table{border-collapse:collapse;margin-top:6px;font-size:14px}
+.valeurs th,.valeurs td{padding:3px 16px 3px 0;text-align:left;font-weight:normal;border-bottom:1px solid var(--trait)}
+
+/* Factures */
+.lignes{width:100%;border-collapse:collapse}
+.lignes th{font-size:13px;color:var(--encre-2);font-weight:normal;text-align:left;padding:0 8px 6px 0}
+.lignes td{padding:4px 8px 4px 0;vertical-align:top}
+.lignes .num-col{width:96px}
+.lignes .total-col{width:96px;text-align:right;padding-top:12px;white-space:nowrap}
+.lignes .act-col{width:72px}
+.total-ligne{display:flex;justify-content:flex-end;align-items:baseline;gap:16px;font-size:19px;margin:12px 0 2px;font-family:var(--serif)}
+.mention-tva{text-align:right;font-size:13px;color:var(--encre-3);margin:0}
+.envoi{background:var(--papier-2);border-radius:10px;padding:14px 16px;margin-bottom:22px}
+.envoi .aide{margin:10px 0 0;font-size:13.5px}
+.factures{width:100%;border-collapse:collapse}
+.factures th,.factures td{text-align:left;padding:10px 12px 10px 0;border-bottom:1px solid var(--trait);vertical-align:top}
+.factures th{font-size:13px;color:var(--encre-2);font-weight:normal}
+.factures .montant{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.etat-facture.a-regler{color:var(--veille)}
+
+/* Accueil */
+.intro{font-size:17px;color:var(--encre-2);max-width:60ch;margin:10px 0 20px}
+.liste-simple{list-style:none;margin:0;padding:0}
+.liste-simple li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;padding:9px 0;border-top:1px solid var(--trait)}
+.liste-simple a{color:inherit;font-weight:600;text-decoration:none}
+.liste-simple a:hover{color:var(--lagon-fort)}
+
+/* Fenêtres */
+dialog{border:0;padding:0;border-radius:12px;background:var(--papier);color:var(--encre);width:min(800px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-shadow:0 24px 64px rgba(8,28,28,.28)}
+dialog.etroit{width:min(480px,calc(100vw - 24px))}
+dialog::backdrop{background:rgba(12,28,28,.45)}
+.dlg-tete{position:sticky;top:0;z-index:3;background:var(--papier);padding:18px 24px 12px;border-bottom:1px solid var(--trait)}
+.dlg-tete h2{font-family:var(--serif);font-weight:normal;font-size:24px}
+.dlg-tete .sous{margin:2px 0 0}
+.dlg-corps{padding:18px 24px 6px}
+.dlg-pied{position:sticky;bottom:0;z-index:3;background:var(--papier);padding:12px 24px;border-top:1px solid var(--trait);display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+.dlg-pied .espace{flex:1}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:var(--encre);color:var(--papier);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100vw - 32px);z-index:10}
+.toast.visible{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Téléphone */
+@media (max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  body.vue-fiche .barre{display:none}
+  body:not(.vue-fiche) .principal{display:none}
+  .retour{display:inline-flex}
+  .page{padding:14px 16px 56px}
+  .grille.g4,.grille.g3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fiche-nom{font-size:29px}
+  .cases{grid-template-columns:minmax(0,1fr)}
+  .rep{grid-template-columns:minmax(0,1fr)}
+  .carte-corps{grid-template-columns:minmax(0,1fr)}
+  .dlg-tete,.dlg-corps,.dlg-pied{padding-left:16px;padding-right:16px}
+  dialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0;margin:0}
+  dialog.etroit{width:100vw;max-width:100vw}
+  dialog[open]{display:flex;flex-direction:column}
+  dialog[open] > form{display:flex;flex-direction:column;flex:1 0 auto}
+  .dlg-corps{flex:1 0 auto}
+  .lignes thead{display:none}
+  .lignes tr{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;padding:8px 0;border-bottom:1px solid var(--trait)}
+  .lignes td{padding:0}
+  .lignes td:first-child{grid-column:1/-1}
+  .lignes .total-col{padding-top:8px}
+  .lignes .act-col{grid-column:1/-1;width:auto}
+}
+@media (max-width:480px){
+  .grille,.grille.g4,.grille.g3{grid-template-columns:minmax(0,1fr)}
+  .factures .col-presta{display:none}
+}
+
+/* Synchronisation */
+.sync-options{display:grid;gap:10px;margin:4px 0 16px}
+.sync-option{font:inherit;color:inherit;text-align:left;display:grid;grid-template-columns:40px minmax(0,1fr);gap:2px 14px;align-items:center;background:var(--papier);border:1px solid var(--trait);border-radius:10px;padding:14px 16px;cursor:pointer}
+.sync-option:hover{border-color:var(--lagon);background:var(--papier-2)}
+.sync-option .ico{grid-row:1/3;width:40px;height:40px;border-radius:10px;background:var(--lagon-clair);color:var(--lagon-fort);display:grid;place-items:center}
+.sync-option strong{font-weight:600}
+.sync-option .conseil{font-size:12.5px;font-weight:600;color:var(--lagon-fort);margin-left:6px}
+.sync-centre{text-align:center}
+.sync-centre .aide{margin-left:auto;margin-right:auto}
+.qr-cadre{background:#fff;padding:10px;border-radius:12px;width:min(272px,100%);margin:4px auto 14px;box-shadow:0 0 0 1px var(--trait)}
+.qr-cadre svg{display:block;width:100%;height:auto}
+.viseur{position:relative;width:min(320px,100%);aspect-ratio:1;margin:4px auto 14px;border-radius:14px;overflow:hidden;background:#0c1414}
+.viseur video{width:100%;height:100%;object-fit:cover;display:block}
+.viseur::after{content:"";position:absolute;inset:14%;border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.28)}
+.attente{display:flex;gap:10px;align-items:center;justify-content:center;color:var(--encre-2);margin:10px 0}
+.rond{width:16px;height:16px;border-radius:50%;border:2px solid var(--lagon-clair);border-top-color:var(--lagon);animation:tourne .9s linear infinite;flex:none}
+@keyframes tourne{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.rond{animation-duration:2.4s}}
+.pastille-ok{width:46px;height:46px;border-radius:50%;background:var(--lagon-clair);color:var(--lagon-fort);display:grid;place-items:center;margin:4px auto 12px}
+.pastille-ok.erreur{background:var(--alerte-fond);color:var(--alerte)}
+.bilan{list-style:none;margin:12px 0 4px;padding:0;text-align:left}
+.bilan li{padding:8px 0;border-top:1px solid var(--trait)}
+.bilan li:last-child{border-bottom:1px solid var(--trait)}
+.btn-synchro svg{flex:none}
+.nobr{white-space:nowrap}
+
+/* Impression */
+#impression{display:none}
+@media print{
+  @page{size:A4;margin:14mm 15mm 16mm}
+  html,body{height:auto;background:#fff!important;color:#000}
+  .app,dialog,.toast{display:none!important}
+  #impression{display:block;color:#111;font:10.5pt/1.45 var(--sans)}
+  .imp-page{break-after:page}
+  .imp-page:last-child{break-after:auto}
+  .imp-entete{display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid #999;padding-bottom:6px;margin-bottom:14px;font-size:8.5pt;color:#444}
+  #impression h1{font-family:var(--serif);font-weight:normal;font-size:21pt;margin:4px 0 2px}
+  #impression h2{font-size:12pt;margin:16px 0 6px}
+  #impression p{margin:0 0 6px}
+  .imp-sous{font-size:12pt}
+  .imp-champs{display:grid;grid-template-columns:1fr 1fr;gap:7px 26px}
+  .imp-champ,.imp-ligne{display:flex;gap:6px;align-items:baseline}
+  .imp-ligne{margin-top:5px}
+  .imp-champ .val,.imp-ligne .val{flex:1;border-bottom:1px dotted #777;min-height:1.35em}
+  .imp-q{margin:6px 0 8px;break-inside:avoid}
+  .imp-cases{columns:2;column-gap:26px;margin:3px 0}
+  .imp-cases.trois{columns:3}
+  .imp-cases div{break-inside:avoid}
+  .imp-signature{display:flex;align-items:flex-end;gap:10px;margin-top:16px}
+  .imp-signature .val{flex:1;border-bottom:1px solid #777;min-height:2.6em}
+  #impression table{border-collapse:collapse;width:100%;font-size:9.5pt;margin:4px 0 10px}
+  #impression th,#impression td{border-bottom:1px solid #bbb;padding:4px 8px 4px 0;text-align:left;vertical-align:top}
+  #impression ul{margin:3px 0 10px;padding-left:20px}
+  .imp-cadre{border:1px solid #999;padding:8px 12px;margin:16px 0 0;break-inside:avoid}
+  .imp-alerte{border-left:3px solid #000;padding-left:10px;margin:8px 0}
+  .imp-on{display:grid;grid-template-columns:auto 1fr;gap:12px;margin:3px 0;break-inside:avoid}
+  .imp-on .boites{white-space:nowrap}
+  .imp-lignes span{display:block;border-bottom:1px dotted #777;height:1.65em}
+  .imp-texte{white-space:pre-line;border-bottom:1px dotted #777;padding-bottom:2px}
+  .imp-note{font-size:9.5pt;color:#333;margin-top:12px}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="barre" aria-label="Fiches clients">
+    <div class="barre-tete">
+      <a class="marque" href="#/" style="color:inherit;text-decoration:none">Carnet de drainage</a>
+      <input type="search" id="recherche" placeholder="Rechercher une fiche" aria-label="Rechercher une fiche" autocomplete="off">
+      <button class="btn btn-plein large-btn" data-action="client-nouveau">Nouvelle fiche</button>
+    </div>
+    <ul class="liste" id="liste"></ul>
+    <div class="pied">
+      <p class="statut attente" id="statut">Chargement…</p>
+      <p class="sous" id="sauvegardeInfo"></p>
+      <button class="btn large-btn btn-synchro" data-action="synchro" title="Synchroniser avec mon autre appareil"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6A5.5 5.5 0 0 0 3.2 4.3M2.5 10a5.5 5.5 0 0 0 10.3 1.7"/><path d="M3 1.8v2.7h2.7M13 14.2v-2.7h-2.7"/></svg>Synchroniser</button>
+      <div class="actions">
+        <button class="btn petit" data-action="exporter">Sauvegarder</button>
+        <button class="btn petit" data-action="importer">Restaurer</button>
+        <button class="btn petit" data-action="reglages">Réglages</button>
+        <button class="btn petit" data-action="installer" id="btnInstaller" hidden>Installer l'appli</button>
+      </div>
+      <input type="file" id="fichierImport" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+  <main class="principal" id="principal" tabindex="-1"></main>
+</div>
+<dialog id="dlg" aria-labelledby="dlgTitre"></dialog>
+<div id="impression" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="qr.js"></script>
+<script src="fusion.js"></script>
+<script>
+'use strict';
+
+/* =========================================================
+   Petits outils
+   ========================================================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = x => JSON.parse(JSON.stringify(x));
+const pad = (n, l = 2) => String(n).padStart(l, '0');
+function uid(){ try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {} return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+function aujourdhui(){ const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function versDate(s){ if (!s || !/^\d{4}-\d{2}-\d{2}/.test(s)) return null; const [y,m,d] = s.slice(0,10).split('-').map(Number); return new Date(y, m-1, d); }
+function fmtDate(s, o = {day:'numeric', month:'long', year:'numeric'}){ const d = versDate(s); return d ? d.toLocaleDateString('fr-FR', o) : ''; }
+function fmtCourt(s){ const d = versDate(s); return d ? `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}` : ''; }
+function joursDepuis(s){ const d = versDate(s); if (!d) return null; return Math.round((versDate(aujourdhui()) - d) / 86400000); }
+function age(s){ const d = versDate(s); if (!d) return null; const t = new Date(); let a = t.getFullYear() - d.getFullYear(); if (t.getMonth() < d.getMonth() || (t.getMonth() === d.getMonth() && t.getDate() < d.getDate())) a--; return a >= 0 && a < 130 ? a : null; }
+function num(v){ if (v == null) return null; const t = String(v).replace(/[\s  ]/g, '').replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : null; }
+function fmtNum(n){ return n == null ? '' : Number(n).toLocaleString('fr-FR', {maximumFractionDigits:2}); }
+function eur(n){ return n == null || !Number.isFinite(Number(n)) ? '' : Number(n).toLocaleString('fr-FR', {style:'currency', currency:'EUR'}); }
+function normal(s){ return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+function majuscule(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function tronquer(s, n){ s = String(s || ''); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; }
+const telBrut = t => String(t || '').replace(/[^\d+]/g, '');
+const telLien = t => 'tel:' + telBrut(t);
+const smsLien = (t, corps) => 'sms:' + telBrut(t) + (corps ? '?&body=' + encodeURIComponent(corps) : '');
+function mailLien(e, sujet, corps){ const q = []; if (sujet) q.push('subject=' + encodeURIComponent(sujet)); if (corps) q.push('body=' + encodeURIComponent(corps.replace(/\r?\n/g, '\r\n'))); return 'mailto:' + String(e || '').trim() + (q.length ? '?' + q.join('&') : ''); }
+
+/* =========================================================
+   Référentiels
+   ========================================================= */
+function o(liste){ return liste.map(x => Array.isArray(x) ? (x[1] === 'aucun' ? {v:x[0], aucun:true} : {v:x[0], niveau:x[1]}) : {v:x}); }
+
+// Questionnaires de la formatrice (repris tels quels ; « la praticienne » devient « le praticien »).
+// niveau « rouge » : situation de report ; « orange » : à adapter ou avis médical à demander.
+// Premier questionnaire, utilisé jusqu'en octobre 2026 : gardé pour afficher, corriger et imprimer les questionnaires déjà remplis.
+const ANCIEN = {
+  id: 'formatrice-v1',
+  court: 'Ancien modèle',
+  libelleDate: 'Date de la séance',
+  identite: [['Nom', c => c.nom], ['Prénom', c => c.prenom], ['Date de naissance', c => fmtCourt(c.naissance)], ['Téléphone', c => c.tel], ['E-mail', c => c.email]],
+  nom: 'Questionnaire préalable, séance de drainage lymphatique',
+  enTete: 'Questionnaire préalable — Séance de drainage lymphatique',
+  titre: 'Questionnaire',
+  sousTitre: 'Avant une séance de drainage lymphatique',
+  intro: "Ce questionnaire nous permet d'assurer votre sécurité pendant la séance et d'adapter le soin à votre situation. Merci d'y répondre avec précision — toutes les informations sont confidentielles.",
+  sections: [
+    { titre:'Votre objectif', questions:[
+      { id:'objectif', type:'cases', label:'Quelle est la raison principale de votre rendez-vous ?',
+        options:o(['Jambes lourdes',"Rétention d'eau",'Sensation de gonflement','Cellulite','Bien-être / relaxation','Détox / sensation de légèreté','Préparation à un événement',['Post-opératoire','orange'],'Sport / récupération']), autre:'Autre' } ]},
+    { titre:'Votre état de santé', questions:[
+      { id:'suivi-medecin', type:'ouinon', label:'Êtes-vous actuellement suivi(e) par un médecin ?', niveauOui:'orange', court:'Suivi médical en cours',
+        precisions:[{id:'raison', label:'Si oui, pour quelle raison ?', court:'Raison'}] },
+      { id:'antecedents', type:'cases', label:'Avez-vous ou avez-vous eu :',
+        options:o([['Cancer en cours de traitement','rouge'],['Cancer en rémission','orange'],['Maladie cardiaque','orange'],['Insuffisance cardiaque','orange'],['Hypertension','orange'],['Hypotension','orange'],['Diabète','orange'],['Maladie rénale','orange'],['Maladie du foie','orange'],['Troubles thyroïdiens','orange'],['Asthme','orange'],['Maladie auto-immune','orange'],['Aucun de ces problèmes','aucun']]) } ]},
+    { titre:'Contre-indications', questions:[
+      { id:'ci-actuelles', type:'cases', label:'Avez-vous actuellement :',
+        options:o([['Fièvre','rouge'],['Infection','rouge'],['Traitement antibiotique','rouge'],['Phlébite actuelle ou récente','rouge'],['Thrombose','rouge'],['Embolie pulmonaire','rouge'],['Insuffisance cardiaque décompensée','rouge'],['Infection cutanée','rouge'],['Plaie importante','rouge'],['Érysipèle','rouge'],['Aucune de ces situations','aucun']]) } ]},
+    { titre:'Circulation', questions:[
+      { id:'circulation', type:'cases', label:'Souffrez-vous de :', options:o([['Varices','orange'],['Insuffisance veineuse','orange'],['Lymphœdème','orange'],['Œdèmes','orange'],['Aucun','aucun']]) } ]},
+    { titre:'Chirurgie', questions:[
+      { id:'chirurgie', type:'ouinon', label:'Avez-vous subi une intervention chirurgicale ?', niveauOui:'orange', court:'Intervention chirurgicale',
+        precisions:[{id:'nature', label:'Nature', court:'Nature'},{id:'date', label:'Date', court:'Date'}] } ]},
+    { titre:'Grossesse', questions:[
+      { id:'grossesse', type:'choix', label:'Êtes-vous :', options:o([['Enceinte','orange'],['En post-partum','orange'],'Non concernée']) },
+      { id:'semaines', type:'texte', label:'Si grossesse, nombre de semaines' } ]},
+    { titre:'Médicaments', questions:[
+      { id:'medicaments', type:'cases', label:'Prenez-vous actuellement :',
+        options:o([['Anticoagulants','orange'],['Corticoïdes','orange'],['Traitement hormonal','orange'],['Traitement contre le cancer','rouge'],['Diurétiques','orange'],['Aucun','aucun']]), autre:'Autres', autreNiveau:'orange' } ]},
+    { titre:'Allergies', questions:[
+      { id:'allergies', type:'ouinon', label:'Avez-vous des allergies connues ?', niveauOui:'orange', court:'Allergies', precisions:[{id:'detail', label:'Si oui', court:'Précisions'}] } ]},
+    { titre:'Habitudes de vie', questions:[
+      { id:'eau', type:'choix', label:"Combien buvez-vous d'eau par jour ?", options:o(["Moins d'1 L",'1 à 1,5 L','1,5 à 2 L','Plus de 2 L']) },
+      { id:'activite', type:'choix', label:'Pratiquez-vous une activité physique ?', options:o(['Jamais','Occasionnellement','1 à 2 fois / semaine','Plus de 3 fois / semaine']) },
+      { id:'stress', type:'choix', label:'Votre niveau de stress actuel :', options:o(['Faible','Modéré','Élevé']) },
+      { id:'sommeil', type:'choix', label:'Votre sommeil est :', options:o(['Réparateur','Moyen','Mauvais']) } ]},
+    { titre:'Symptômes', questions:[
+      { id:'symptomes', type:'cases', label:'Cochez ce que vous ressentez régulièrement :',
+        options:o(['Jambes lourdes','Gonflement','Fatigue','Ballonnements','Constipation','Cellulite',"Sensation de rétention d'eau",'Douleurs musculaires',['Aucune de ces réponses','aucun']]) } ]},
+    { titre:'Consentement', questions:[
+      { id:'consentement', type:'engagements', label:'Consentement',
+        options:o(['Je certifie avoir répondu honnêtement aux questions ci-dessus.',"Je m'engage à informer le praticien de toute modification de mon état de santé.",'Je comprends que le drainage lymphatique est une technique de bien-être et ne remplace en aucun cas un suivi médical.']) } ]},
+    { titre:'Contre-indications et précautions', annexe:true, questions:[
+      { id:'annexe-accord', type:'accord', label:"J'ai pris connaissance de ces informations et je confirme ne pas être concerné(e) par les situations décrites ci-dessus, sauf mention contraire indiquée dans le questionnaire." } ]}
+  ],
+  annexe: {
+    intro:"Cette page complète le questionnaire précédent. Elle a pour but de vous informer clairement des situations dans lesquelles une séance de drainage lymphatique doit être reportée ou adaptée, et de recueillir votre accord en toute transparence.",
+    listes:[
+      { titre:'La séance sera reportée en cas de :', items:['Cancer évolutif ou en cours de traitement, sans accord médical explicite.','Infection sévère ou état fébrile.','Insuffisance cardiaque décompensée.','Thrombose veineuse profonde, phlébite ou embolie pulmonaire en cours ou récente.','Trouble de la coagulation ou maladie hémorragique.'] },
+      { titre:'Le protocole sera adapté, ou un avis médical demandé, en cas de :', items:['Hypotension artérielle marquée.','Hyperthyroïdie non stabilisée.','Asthme ou pathologie respiratoire active.','Varices importantes ou fragilité veineuse.','Insuffisance rénale sévère.','Grossesse, en particulier au premier trimestre.'] }
+    ],
+    avertissement:"Cette séance relève exclusivement d'un accompagnement esthétique et bien-être. Elle ne constitue ni un diagnostic, ni un traitement médical, et ne se substitue en aucun cas à un avis ou un suivi médical. En cas de doute sur votre état de santé, il vous appartient d'en informer le praticien avant la séance, et de consulter un professionnel de santé si nécessaire."
+  }
+};
+
+// Questionnaire Coralys (page 1 sur 6 du document de la formatrice) : modèle utilisé pour les nouveaux questionnaires.
+// Antécédents : fièvre ou infection active = report (rouge) ; toute autre réponse « Oui » = évaluation individualisée (orange).
+const antecedent = (id, label, niveau = 'orange') => ({ id, type:'ouinon', label, court:label, niveauOui:niveau, compact:true, precisionsSiOui:true,
+  precisions:[{id:'detail', label:'Précisez (date, traitement…)', court:'Précisions'}] });
+const CORALYS = {
+  id: 'coralys-v1',
+  court: 'Coralys',
+  nom: 'Coralys, questionnaire avant soin',
+  enTete: 'Coralys — Questionnaire avant soin',
+  titre: 'Questionnaire avant soin',
+  sousTitre: 'Coralys · Document de recueil préalable, à compléter avec le praticien',
+  libelleDate: 'Date du questionnaire',
+  info: { titre:'Information importante', texte:"Ce questionnaire aide à repérer les situations nécessitant adaptation, report ou avis médical. Il ne permet pas de poser un diagnostic et ne constitue pas à lui seul une autorisation de soin." },
+  intro: "Ce questionnaire aide à repérer les situations nécessitant adaptation, report ou avis médical. Il ne permet pas de poser un diagnostic et ne constitue pas à lui seul une autorisation de soin.",
+  pied: "Merci de répondre au plus près de votre situation. Vous pouvez laisser vide toute question facultative et en parler directement au praticien.",
+  identite: [
+    ['Nom et prénom', c => [c.nom, c.prenom].filter(Boolean).join(' ')],
+    ['Date de naissance', c => fmtCourt(c.naissance)],
+    ['Pronoms', c => c.pronoms, true],
+    ['Téléphone', c => c.tel],
+    ['E-mail', c => c.email],
+    ['Adresse', c => adresseClient(c).join(', '), true],
+    ['Personne à prévenir', c => [c.urgenceNom, c.urgenceLien ? `(${c.urgenceLien})` : '', c.urgenceTel].filter(Boolean).join(' '), true]
+  ],
+  sections: [
+    { titre:'Objectifs et attentes', questions:[
+      { id:'c-objectifs', type:'cases', label:'Cochez les objectifs qui correspondent le mieux à votre demande.',
+        options:o(['Détente','Confort','Sensation de jambes légères','Récupération','Accompagnement du postpartum','Travail abdominal / fascial','Drainage','Remodelage']), autre:'Autre' },
+      { id:'c-attentes', type:'texteLong', label:'Ce que vous souhaitez obtenir ou éviter' } ]},
+    { titre:'Expérience des massages et soins corporels', questions:[
+      { id:'c-experience', type:'choix', label:"Indiquez l'expérience qui correspond le mieux à votre situation actuelle.",
+        options:o(['Jamais','Occasionnelle','Régulière','Récente intervention ou soin']),
+        precisions:[{id:'detail', label:'Récente intervention ou soin : laquelle, quand ?', court:'Intervention ou soin'}] } ]},
+    { titre:'Antécédents médicaux et contre-indications', aide:'Cochez Oui ou Non et précisez.', questions:[
+      antecedent('c-coagulation', 'Phlébite, thrombose, embolie pulmonaire ou trouble de coagulation'),
+      antecedent('c-coeur', 'Maladie cardiaque, insuffisance cardiaque, œdèmes inexpliqués'),
+      antecedent('c-rein-foie', 'Maladie rénale ou hépatique importante'),
+      antecedent('c-cancer', 'Cancer actuel, antécédent de cancer, ablation de ganglions'),
+      antecedent('c-chirurgie', 'Chirurgie récente, cicatrice sensible, implant, hernie'),
+      antecedent('c-grossesse', 'Grossesse, postpartum ou allaitement'),
+      antecedent('c-infection', 'Infection, fièvre, plaie, inflammation ou maladie de peau', 'rouge'),
+      antecedent('c-diabete', 'Diabète, neuropathie, trouble de sensibilité'),
+      antecedent('c-veines', 'Varices importantes, lymphœdème, lipœdème'),
+      antecedent('c-digestif', 'Douleur abdominale, maladie digestive inflammatoire'),
+      antecedent('c-traitements', 'Anticoagulants, traitements en cours, allergies aux huiles'),
+      { id:'c-autres', type:'texteLong', label:'Autres antécédents, dates, traitements, précisions', court:'Autres antécédents', niveauSiRempli:'orange' } ],
+      alerte:{ titre:'Alerte', lignes:[
+        "Douleur thoracique, essoufflement soudain, jambe gonflée et douloureuse d'un seul côté : pas de soin, orientation médicale urgente.",
+        'Fièvre ou infection active : reporter la séance.',
+        'Autres réponses « Oui » : évaluation individualisée, adaptation, report ou avis médical selon la situation. Le questionnaire ne remplace pas un avis médical.'] } },
+    { titre:'Zones concernées et préférences', questions:[
+      { id:'c-zones', type:'cases', label:'Zones concernées', options:o(['Corps entier','Abdomen','Dos','Jambes','Bras','Visage']), autre:'Autre' },
+      { id:'c-pression', type:'choix', label:'Pression souhaitée', options:o(['Légère','Modérée','Ferme','Je ne sais pas']) },
+      { id:'c-eviter', type:'texteLong', label:'Zones à éviter', court:'Zones à éviter', niveauSiRempli:'orange' } ]}
+  ]
+};
+const MODELES = { [ANCIEN.id]:ANCIEN, [CORALYS.id]:CORALYS };
+const MODELE = CORALYS;
+// Modèle d'un questionnaire (celui des nouveaux questionnaires si aucun n'est donné)
+const modeleDe = q => !q ? MODELE : (MODELES[q.modeleId] || { id:q.modeleId, court:'', nom:q.modeleNom || 'Questionnaire', enTete:'Questionnaire de santé', titre:'Questionnaire', sousTitre:'', intro:'', libelleDate:'Date', identite:ANCIEN.identite });
+const TEXTE_RGPD = "J'accepte que mes informations personnelles et de santé soient conservées par le praticien, uniquement pour le suivi de mes séances. Je peux demander à les consulter, les corriger ou les supprimer à tout moment.";
+
+const TYPES = ['Drainage lymphatique complet', 'Drainage tonique', 'Drainage des jambes'];
+const PRESSIONS = ['Légère', 'Moyenne', 'Soutenue'];
+const MOYENS = ['Espèces', 'Chèque', 'Virement', 'Carte bancaire', 'Autre'];
+// Ordre du protocole : sur le dos (jambe G, jambe D, ventre, bras D, bras G), puis sur le ventre (jambe G, jambe D), puis le dos.
+const ZONES = [
+  {id:'jambe-g', label:'Jambe gauche'}, {id:'jambe-d', label:'Jambe droite'}, {id:'ventre', label:'Ventre'},
+  {id:'bras-d', label:'Bras droit'}, {id:'bras-g', label:'Bras gauche'},
+  {id:'jambe-g-arr', label:'Arrière de la jambe gauche'}, {id:'jambe-d-arr', label:'Arrière de la jambe droite'}, {id:'dos', label:'Dos'}
+];
+const GEO = {
+  'jambe-g':{x:92,y:148,w:24,h:132,rx:11}, 'jambe-d':{x:64,y:148,w:24,h:132,rx:11}, 'ventre':{x:64,y:98,w:52,h:46,rx:12},
+  'bras-d':{x:40,y:54,w:18,h:104,rx:9}, 'bras-g':{x:122,y:54,w:18,h:104,rx:9},
+  'jambe-g-arr':{x:244,y:148,w:24,h:132,rx:11}, 'jambe-d-arr':{x:272,y:148,w:24,h:132,rx:11}, 'dos':{x:242,y:50,w:56,h:94,rx:14}
+};
+const MESURES = [['taille','Tour de taille'],['ventre','Ventre (nombril)'],['hanches','Hanches'],['cuisse-g','Cuisse gauche'],['cuisse-d','Cuisse droite'],['mollet-g','Mollet gauche'],['mollet-d','Mollet droit'],['cheville-g','Cheville gauche'],['cheville-d','Cheville droite'],['bras-g','Bras gauche'],['bras-d','Bras droit']];
+const TVA_DEFAUT = 'TVA non applicable, article 293 B du CGI';
+
+/* =========================================================
+   Données et enregistrement local
+   ========================================================= */
+const COLLECTIONS = Fusion.COLLECTIONS;
+function etatVide(){
+  return { application:'carnet-drainage', version:2, clients:[], questionnaires:[], seances:[], factures:[],
+    supprimes:{clients:{}, questionnaires:{}, seances:{}, factures:{}},
+    reglages:{ emetteur:{nom:'', commercial:'', adresse:'', siret:'', tel:'', email:'', tva:TVA_DEFAUT, assurance:''},
+      tarifs: TYPES.map(t => ({id:uid(), designation:t, prix:null})), signature:'', majLe:null,
+      derniereSauvegarde:null, derniereModif:null, derniereSynchro:null, synchroAvec:'' },
+    enregistreLe:null };
+}
+function normaliser(x){
+  const e = etatVide();
+  if (!x || typeof x !== 'object') return e;
+  for (const k of COLLECTIONS) e[k] = Array.isArray(x[k]) ? x[k].filter(r => r && typeof r === 'object') : [];
+  for (const k of COLLECTIONS) { const s = x.supprimes && x.supprimes[k]; e.supprimes[k] = s && typeof s === 'object' ? {...s} : {}; }
+  const r = x.reglages || {};
+  e.reglages = { ...e.reglages, ...r, emetteur:{ ...e.reglages.emetteur, ...(r.emetteur || {}) }, tarifs: Array.isArray(r.tarifs) ? r.tarifs : e.reglages.tarifs };
+  e.enregistreLe = x.enregistreLe || null;
+  return e;
+}
+// Carnets créés avant la synchro : date les réglages déjà remplis pour qu'ils ne soient pas écrasés par des réglages vides
+function migrer(e){
+  const r = e.reglages;
+  if (!r.majLe) {
+    const rempli = Object.entries(r.emetteur || {}).some(([k, v]) => k !== 'tva' && v) || !!r.signature || (r.tarifs || []).some(t => t.prix != null);
+    if (rempli) r.majLe = e.enregistreLe || r.derniereModif || new Date().toISOString();
+  }
+  return e;
+}
+// Suppression mémorisée, pour que l'élément ne revienne pas à la prochaine synchro
+function oublier(collection, ids){
+  const t = new Date().toISOString();
+  const liste = new Set([].concat(ids));
+  etat[collection] = etat[collection].filter(x => !liste.has(x.id));
+  liste.forEach(id => { etat.supprimes[collection][id] = t; });
+}
+let etat = etatVide();
+const ui = { clientId:null, onglet:'identite', recherche:'', questMode:null, questVue:null, mesure:null };
+let statutStockage = 'attente';
+
+const BASE = 'carnet-drainage', MAGASIN = 'donnees', CLE = 'etat', CLE_LS = 'carnet-drainage-etat';
+let idb = null, lsDispo = false, minuteur = null;
+function ouvrirIDB(){ return new Promise((res, rej) => { try { const r = indexedDB.open(BASE, 1); r.onupgradeneeded = () => r.result.createObjectStore(MAGASIN); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }); }
+function idbLire(cle = CLE){ return new Promise((res, rej) => { const q = idb.transaction(MAGASIN, 'readonly').objectStore(MAGASIN).get(cle); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function idbEcrire(v, cle = CLE){ return new Promise((res, rej) => { const t = idb.transaction(MAGASIN, 'readwrite'); t.objectStore(MAGASIN).put(v, cle); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
+
+async function charger(){
+  let a = null, b = null;
+  try { idb = await ouvrirIDB(); const v = await idbLire(); if (v) a = JSON.parse(v); } catch (e) { idb = null; }
+  try { localStorage.setItem(CLE_LS + '-test', '1'); localStorage.removeItem(CLE_LS + '-test'); lsDispo = true; const v = localStorage.getItem(CLE_LS); if (v) b = JSON.parse(v); } catch (e) { lsDispo = false; }
+  const meilleur = [a, b].filter(Boolean).sort((x, y) => String(y.enregistreLe || '').localeCompare(String(x.enregistreLe || '')))[0];
+  if (meilleur) etat = migrer(normaliser(meilleur));
+  statutStockage = (idb || lsDispo) ? 'ok' : 'erreur';
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+}
+function enregistrer(modif = true){
+  if (modif) etat.reglages.derniereModif = new Date().toISOString();
+  clearTimeout(minuteur);
+  minuteur = setTimeout(ecrireMaintenant, 250);
+}
+async function ecrireMaintenant(){
+  clearTimeout(minuteur); minuteur = null;
+  etat.enregistreLe = new Date().toISOString();
+  const json = JSON.stringify(etat);
+  let ok = false;
+  if (lsDispo) { try { localStorage.setItem(CLE_LS, json); ok = true; } catch (e) {} }
+  if (idb) { try { await idbEcrire(json); ok = true; } catch (e) {} }
+  statutStockage = ok ? 'ok' : 'erreur';
+  majPied();
+  try { if (canalFenetres) canalFenetres.postMessage({type:'maj'}); } catch (e) {}
+}
+// Appli ouverte dans deux fenêtres (par exemple après le scan avec l'appareil photo) :
+// la fenêtre restée en arrière-plan relit les fiches au lieu de les écraser avec une ancienne version.
+let canalFenetres = null, aRecharger = false;
+try { canalFenetres = new BroadcastChannel('carnet-drainage'); canalFenetres.onmessage = e => { if (e.data && e.data.type === 'maj') autreFenetre(); }; } catch (e) {}
+function autreFenetre(){ if ($('#dlg').open || minuteur) { aRecharger = true; return; } relire(); }
+async function relire(){ aRecharger = false; await charger(); render(); }
+function relireSiBesoin(){ if (aRecharger) setTimeout(() => { if (aRecharger && !$('#dlg').open && !minuteur) relire(); }, 60); }
+function viderEnAttente(){ if (minuteur) { clearTimeout(minuteur); minuteur = null; etat.enregistreLe = new Date().toISOString(); const json = JSON.stringify(etat); try { if (lsDispo) localStorage.setItem(CLE_LS, json); } catch (e) {} if (idb) idbEcrire(json).catch(() => {}); } }
+window.addEventListener('pagehide', viderEnAttente);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') viderEnAttente(); });
+
+/* Accès aux données */
+const client = id => etat.clients.find(c => c.id === id);
+const cleSeance = s => (s.date || '') + (s.heure || '');
+const seancesDe = id => etat.seances.filter(s => s.clientId === id).sort((a, b) => cleSeance(b).localeCompare(cleSeance(a)) || String(b.creeLe).localeCompare(String(a.creeLe)));
+const questionnairesDe = id => etat.questionnaires.filter(q => q.clientId === id).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.creeLe).localeCompare(String(a.creeLe)));
+const dernierQuestionnaire = id => questionnairesDe(id)[0] || null;
+const facturesDe = id => etat.factures.filter(f => f.clientId === id).sort((a, b) => b.annee - a.annee || b.rang - a.rang);
+const nomComplet = c => [c.prenom, c.nom].filter(Boolean).join(' ').trim() || 'Sans nom';
+const triClients = (a, b) => (a.nom || a.prenom || '').localeCompare(b.nom || b.prenom || '', 'fr', {sensitivity:'base'}) || (a.prenom || '').localeCompare(b.prenom || '', 'fr', {sensitivity:'base'});
+const tarifPour = designation => { const t = etat.reglages.tarifs.find(t => normal(t.designation) === normal(designation)); return t ? t.prix : null; };
+const emetteurComplet = () => { const e = etat.reglages.emetteur; return !!(e.nom && e.adresse && e.siret); };
+
+function alertesQuestionnaire(q){
+  const out = [];
+  if (!q) return out;
+  const parId = Object.fromEntries(q.reponses.map(r => [r.id, r]));
+  for (const r of q.reponses) {
+    if (r.type === 'cases') {
+      for (const v of r.value || []) { const op = (r.options || []).find(x => x.v === v); if (op && op.niveau) out.push({niveau:op.niveau, texte:v}); }
+      if (r.autreValeur && r.autreNiveau) out.push({niveau:r.autreNiveau, texte:`${r.autre} : ${r.autreValeur}`});
+    } else if (r.type === 'choix') {
+      const op = (r.options || []).find(x => x.v === r.value);
+      if (op && op.niveau) { let t = r.value; const sem = parId.semaines && parId.semaines.value; if (r.id === 'grossesse' && sem) t += ` (${sem}${/sem/i.test(sem) ? '' : ' semaines'})`; out.push({niveau:op.niveau, texte:t}); }
+    } else if (r.type === 'ouinon' && r.value === 'oui' && r.niveauOui) {
+      const p = (r.precisions || []).map(x => r.reponsesPrecisions && r.reponsesPrecisions[x.id]).filter(Boolean).join(', ');
+      out.push({niveau:r.niveauOui, texte:(r.court || r.label) + (p ? ` : ${p}` : '')});
+    } else if (r.type === 'texteLong' && r.niveauSiRempli && r.value) {
+      out.push({niveau:r.niveauSiRempli, texte:`${r.court || r.label} : ${r.value}`});
+    }
+  }
+  return out;
+}
+const alertesDe = id => alertesQuestionnaire(dernierQuestionnaire(id));
+function consentementIncomplet(q){
+  if (!q) return false;
+  return q.reponses.some(r => (r.type === 'engagements' && (r.value || []).length < (r.options || []).length) || (r.type === 'accord' && !r.value));
+}
+
+/* =========================================================
+   Navigation
+   ========================================================= */
+function route(){
+  // Lien de synchronisation ouvert depuis l'appareil photo du téléphone
+  const lienSync = lireLienSynchro(location.hash);
+  if (lienSync) { try { history.replaceState(null, '', location.pathname + location.search + '#/'); } catch (e) { location.hash = '#/'; } }
+  if (lienSync) setTimeout(() => ouvrirSynchro(lienSync), 0);
+  const p = location.hash.replace(/^#\/?/, '').split('/');
+  const id = p[0] === 'fiche' ? p[1] : null;
+  const onglet = ['identite','sante','seances','factures'].includes(p[2]) ? p[2] : 'identite';
+  if (id !== ui.clientId || onglet !== ui.onglet) { ui.questMode = null; ui.questVue = null; }
+  ui.clientId = id; ui.onglet = onglet;
+  render();
+  $('#principal').scrollTop = 0;
+}
+window.addEventListener('hashchange', route);
+const aller = (id, onglet = 'identite') => { location.hash = id ? `#/fiche/${id}/${onglet}` : '#/'; };
+
+/* =========================================================
+   Affichage
+   ========================================================= */
+function render(){
+  document.body.classList.toggle('vue-fiche', !!ui.clientId);
+  renderListe();
+  renderPrincipal();
+  majPied();
+}
+function renderListe(){
+  const ul = $('#liste');
+  if (!etat.clients.length) { ul.innerHTML = '<li class="liste-vide">Les fiches que tu crées apparaîtront ici.<br><br>Tes fiches sont déjà sur ton autre appareil ? Touche « Synchroniser » en bas pour les récupérer.</li>'; return; }
+  const q = normal(ui.recherche);
+  const items = etat.clients.slice().sort(triClients).filter(c => !q || normal(`${c.prenom} ${c.nom} ${c.tel} ${c.email} ${c.ville}`).includes(q));
+  if (!items.length) { ul.innerHTML = `<li class="liste-vide">Aucune fiche ne correspond à « ${esc(ui.recherche)} ».</li>`; return; }
+  ul.innerHTML = items.map(c => {
+    const s = seancesDe(c.id)[0];
+    const al = alertesDe(c.id);
+    const niv = al.some(a => a.niveau === 'rouge') ? '' : 'orange';
+    return `<li><a href="#/fiche/${c.id}/${ui.clientId === c.id ? ui.onglet : 'identite'}"${ui.clientId === c.id ? ' aria-current="page"' : ''}>
+      <span class="nom-liste">${esc(nomComplet(c))}</span>${al.length ? `<span class="pastille ${niv}" role="img" aria-label="Point de santé à vérifier" title="Point de santé à vérifier">!</span>` : '<span></span>'}
+      <span class="sous">${s ? `Dernière séance le ${fmtDate(s.date, {day:'numeric', month:'short', year:'numeric'})}` : 'Pas encore de séance'}</span></a></li>`;
+  }).join('');
+}
+function renderPrincipal(){
+  const m = $('#principal');
+  const c = ui.clientId ? client(ui.clientId) : null;
+  if (ui.clientId && !c) { location.hash = '#/'; return; }
+  m.innerHTML = `<div class="page">${c ? htmlFiche(c) : htmlAccueil()}</div>`;
+  if (c && ui.onglet === 'seances') brancherGraph();
+}
+function majContenu(){
+  const c = client(ui.clientId); if (!c) return;
+  $('#contenu').innerHTML = htmlOnglet(c);
+  if (ui.onglet === 'seances') brancherGraph();
+}
+function majEntete(c){ const t = $('#ficheTete'); if (t) t.innerHTML = htmlEntete(c); }
+
+function majPied(){
+  const st = $('#statut');
+  if (statutStockage === 'ok') { st.className = 'statut'; st.textContent = 'Enregistré sur cet appareil'; }
+  else if (statutStockage === 'erreur') { st.className = 'statut erreur'; st.textContent = "Le navigateur bloque l'enregistrement : fais une sauvegarde maintenant."; }
+  else { st.className = 'statut attente'; st.textContent = 'Chargement…'; }
+  const info = $('#sauvegardeInfo');
+  const r = etat.reglages;
+  const aDesDonnees = etat.clients.length > 0;
+  if (!aDesDonnees) { info.textContent = ''; info.className = 'sous'; return; }
+  const quand = d => { const j = Math.floor((Date.now() - new Date(d)) / 86400000); return j <= 0 ? "aujourd'hui" : j === 1 ? 'hier' : `il y a ${j} jours`; };
+  const morceaux = [];
+  if (r.derniereSynchro) morceaux.push(`Synchronisé ${quand(r.derniereSynchro)}`);
+  if (r.derniereSauvegarde) morceaux.push(`${morceaux.length ? 'sauvegardé' : 'Sauvegardé'} ${quand(r.derniereSauvegarde)}`);
+  const protege = [r.derniereSauvegarde, r.derniereSynchro].filter(Boolean).sort().pop();
+  if (!protege) { info.textContent = 'Pas encore synchronisé ni sauvegardé'; info.className = 'sous retard'; return; }
+  const modifApres = r.derniereModif && r.derniereModif > protege;
+  info.textContent = morceaux.join(', ');
+  info.className = 'sous' + (modifApres && Date.now() - new Date(protege) >= 7 * 86400000 ? ' retard' : '');
+}
+
+/* ---------- Accueil ---------- */
+function htmlAccueil(){
+  const n = etat.clients.length, ns = etat.seances.length;
+  const auj = aujourdhui();
+  const aVenir = etat.clients.map(c => { const s = seancesDe(c.id)[0]; return s && s.prochaine && s.prochaine >= auj ? {c, date:s.prochaine} : null; }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  const recentes = etat.seances.slice().sort((a, b) => cleSeance(b).localeCompare(cleSeance(a))).slice(0, 6);
+  const aRegler = etat.factures.filter(f => f.statut !== 'reglee').sort((a, b) => String(a.dateEmission).localeCompare(String(b.dateEmission)));
+  const r = etat.reglages;
+  const protege = [r.derniereSauvegarde, r.derniereSynchro].filter(Boolean).sort().pop() || null;
+  const rappel = n && (!protege || (r.derniereModif > protege && Date.now() - new Date(protege) > 7 * 86400000));
+  const doublons = Fusion.doublons(etat.factures);
+  return `<h1 class="fiche-nom">Carnet de drainage</h1>
+  <p class="intro">${n ? `${n} fiche${n > 1 ? 's' : ''} et ${ns} séance${ns > 1 ? 's' : ''} enregistrée${ns > 1 ? 's' : ''}.` : 'Crée une fiche pour chaque personne que tu reçois : ses coordonnées, son questionnaire de santé, puis le suivi de chacune de ses séances.'}</p>
+  <div class="actions bloc"><button class="btn btn-plein" data-action="client-nouveau">Nouvelle fiche</button><button class="btn" data-action="quest-imprimer-vierge">Imprimer un questionnaire vierge</button>${!emetteurComplet() ? '<button class="btn" data-action="reglages">Renseigner mes informations de facturation</button>' : ''}</div>
+  ${!n ? `<section class="bloc vide"><h2 class="titre-bloc">Tu as déjà des fiches ?</h2>
+    <p><strong>Elles sont sur ton autre appareil :</strong> touche « Synchroniser » pour les récupérer ici.</p>
+    <p><strong>Elles sont dans l'ancien fichier carnet-drainage.html :</strong> ouvre-le, touche « Sauvegarder », puis reviens ici, touche « Restaurer » et choisis le fichier obtenu.</p>
+    <div class="actions"><button class="btn" data-action="synchro">Synchroniser</button><button class="btn" data-action="importer">Restaurer une sauvegarde</button></div></section>` : ''}
+  ${doublons.length ? `<div class="alerte bloc"><strong>Factures en double après une synchronisation</strong><ul>${doublons.map(g => `<li>N° ${esc(g[0].numero)} : ${g.map(f => esc(f.client && f.client.nom || 'sans nom')).join(' et ')}</li>`).join('')}</ul><p>Ces factures ont été créées sur tes deux appareils avec le même numéro, et elles ont déjà été transmises : l'appli ne les renumérote donc pas. Pour éviter ce cas, synchronise avant de facturer sur l'autre appareil.</p></div>` : ''}
+  ${rappel ? `<div class="alerte orange bloc"><strong>Pense à synchroniser ou à sauvegarder</strong><p>${protege ? `Tes fiches n'ont pas été copiées ailleurs depuis le ${fmtDate(protege.slice(0, 10))}.` : "Tes fiches n'existent pour l'instant que sur cet appareil."} Une synchronisation avec ton autre appareil, ou un fichier de sauvegarde, te permet de tout récupérer si cet appareil est perdu ou réinitialisé.</p><p class="actions"><button class="btn petit btn-plein" data-action="synchro">Synchroniser</button><button class="btn petit" data-action="exporter">Sauvegarder dans un fichier</button></p></div>` : ''}
+  ${aVenir.length ? `<section class="bloc"><h2 class="titre-bloc">Prochaines séances conseillées</h2><ul class="liste-simple">${aVenir.map(x => `<li><a href="#/fiche/${x.c.id}/seances">${esc(nomComplet(x.c))}</a><span class="sous">${fmtDate(x.date)}</span></li>`).join('')}</ul></section>` : ''}
+  ${aRegler.length ? `<section class="bloc"><h2 class="titre-bloc">Factures à régler</h2><ul class="liste-simple">${aRegler.map(f => { const c = client(f.clientId); return `<li><a href="#/fiche/${f.clientId}/factures">${esc(c ? nomComplet(c) : (f.client && f.client.nom) || 'Fiche supprimée')}</a><span class="sous">N° ${esc(f.numero)} du ${fmtDate(f.dateEmission)}, ${eur(f.total)}</span></li>`; }).join('')}</ul></section>` : ''}
+  ${recentes.length ? `<section class="bloc"><h2 class="titre-bloc">Dernières séances</h2><ul class="liste-simple">${recentes.map(s => { const c = client(s.clientId); return c ? `<li><a href="#/fiche/${c.id}/seances">${esc(nomComplet(c))}</a><span class="sous">${fmtDate(s.date)}${s.type ? `, ${esc(s.type.toLowerCase())}` : ''}</span></li>` : ''; }).join('')}</ul></section>` : ''}
+  <section class="bloc"><h2 class="titre-bloc">Où sont tes données ?</h2>
+  <p class="aide">Tes fiches sont enregistrées dans l'appli, sur cet appareil. Elles ne sont envoyées sur aucun serveur. La synchronisation les copie directement de ton téléphone à ton ordinateur et inversement, chiffrées avec une clé à usage unique contenue dans le QR code.</p>
+  <p class="aide">Garde aussi de temps en temps un fichier de sauvegarde (bouton « Sauvegarder ») dans un endroit sûr : il contient des données de santé.</p></section>`;
+}
+
+/* ---------- Fiche ---------- */
+function htmlFiche(c){
+  const ns = seancesDe(c.id).length, nf = facturesDe(c.id).length;
+  const onglets = [['identite','Identité'],['sante','Santé'],['seances', `Séances${ns ? ` (${ns})` : ''}`],['factures', `Factures${nf ? ` (${nf})` : ''}`]];
+  return `<div id="ficheTete">${htmlEntete(c)}</div>
+  <nav class="onglets" aria-label="Sections de la fiche">${onglets.map(([k, l]) => `<a href="#/fiche/${c.id}/${k}"${ui.onglet === k ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
+  <div id="contenu">${htmlOnglet(c)}</div>`;
+}
+function htmlOnglet(c){
+  if (ui.onglet === 'sante') return htmlSante(c);
+  if (ui.onglet === 'seances') return htmlSeances(c);
+  if (ui.onglet === 'factures') return htmlFactures(c);
+  return htmlIdentite(c);
+}
+function htmlEntete(c){
+  const a = age(c.naissance);
+  const ss = seancesDe(c.id);
+  const meta = [];
+  if (a !== null) meta.push(`<span>${a} ans</span>`);
+  if (c.pronoms && c.pronoms.trim()) meta.push(`<span>${esc(c.pronoms.trim())}</span>`);
+  if (c.tel) meta.push(`<span><a href="${telLien(c.tel)}" title="Appeler">${esc(c.tel)}</a></span>`);
+  if (c.email) meta.push(`<span><a href="${esc(mailLien(c.email))}" title="Écrire un e-mail">${esc(c.email)}</a></span>`);
+  if (c.ville) meta.push(`<span>${esc(c.ville)}</span>`);
+  if (ss.length) meta.push(`<span>Première séance le ${fmtDate(ss[ss.length - 1].date)}</span>`);
+  return `<a class="btn discret retour" href="#/">Retour aux fiches</a>
+  <div class="tete"><h1 class="fiche-nom">${esc(nomComplet(c))}</h1>
+  <div class="actions"><button class="btn petit" data-action="imprimer-fiche">Imprimer la fiche</button></div></div>
+  ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
+  ${htmlAlertes(c, true)}`;
+}
+function htmlAlertes(c, avecAFaire){
+  const q = dernierQuestionnaire(c.id);
+  const al = alertesQuestionnaire(q);
+  const rouges = al.filter(a => a.niveau === 'rouge'), oranges = al.filter(a => a.niveau === 'orange');
+  let h = '';
+  if (rouges.length) h += `<div class="alerte" role="note"><strong>Séance à reporter si la situation est toujours d'actualité</strong><ul>${rouges.map(a => `<li>${esc(a.texte)}</li>`).join('')}</ul></div>`;
+  if (oranges.length) h += `<div class="alerte orange" role="note"><strong>À prendre en compte : adapter le protocole ou demander un avis médical</strong><ul>${oranges.map(a => `<li>${esc(a.texte)}</li>`).join('')}</ul></div>`;
+  if (c.precautions && c.precautions.trim()) h += `<div class="alerte orange" role="note"><strong>Tes précautions pour cette personne</strong><p>${esc(c.precautions.trim())}</p></div>`;
+  if (avecAFaire) {
+    const aFaire = [];
+    if (!q) aFaire.push(`Questionnaire de santé à remplir avant la première séance. <a href="#/fiche/${c.id}/sante">Onglet Santé</a>`);
+    else {
+      if (joursDepuis(q.date) > 365) aFaire.push('Le questionnaire date de plus d\'un an : pense à le mettre à jour.');
+      if (consentementIncomplet(q)) aFaire.push('Des cases de consentement ne sont pas cochées dans le questionnaire.');
+    }
+    if (!c.consentRgpd) aFaire.push(`Accord pour la conservation des données non noté. <a href="#/fiche/${c.id}/identite">Onglet Identité</a>`);
+    if (aFaire.length) h += `<div class="alerte orange" role="note"><strong>À faire</strong><ul>${aFaire.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+  }
+  return h;
+}
+
+/* ---------- Identité ---------- */
+const CHAMPS_ID = [
+  {titre:'Coordonnées', champs:[['prenom','Prénom'],['nom','Nom'],['naissance','Date de naissance','date'],['pronoms','Pronoms (facultatif)'],['tel','Téléphone','tel'],['email','E-mail','email'],['adresse','Adresse','text','large'],['cp','Code postal'],['ville','Ville'],['profession','Profession']]},
+  {titre:'En cas de besoin', champs:[['urgenceNom','Personne à prévenir'],['urgenceLien','Son lien avec la personne'],['urgenceTel','Son téléphone','tel'],['medecin','Médecin traitant']]},
+  {titre:'Notes', champs:[['source',"Comment cette personne t'a connu",'text','large'],['notes','Notes libres','textarea','large']]}
+];
+function liensContact(k, v){
+  if (!v) return '';
+  if (k === 'tel') return `<a href="${telLien(v)}">Appeler</a><a href="${smsLien(v)}">SMS</a>`;
+  if (k === 'urgenceTel') return `<a href="${telLien(v)}">Appeler</a>`;
+  if (k === 'email') return `<a href="${esc(mailLien(v))}">Écrire</a>`;
+  return '';
+}
+function htmlIdentite(c){
+  const champ = ([k, l, t = 'text', cl]) => {
+    const id = 'c-' + k, v = c[k] || '';
+    const lien = ['tel','email','urgenceTel'].includes(k);
+    const label = lien ? `<div class="lbl-ligne"><label for="${id}">${l}</label><span class="liens-contact" data-liens="${k}">${liensContact(k, v)}</span></div>` : `<label for="${id}">${l}</label>`;
+    const input = t === 'textarea' ? `<textarea id="${id}" name="${k}" data-champ-client rows="4">${esc(v)}</textarea>` : `<input id="${id}" name="${k}" type="${t}" value="${esc(v)}" data-champ-client autocomplete="off"${t === 'tel' ? ' inputmode="tel"' : ''}>`;
+    return `<div class="champ${cl ? ' large' : ''}">${label}${input}</div>`;
+  };
+  return `<form onsubmit="return false" autocomplete="off">
+  ${CHAMPS_ID.map(g => `<fieldset><legend>${g.titre}</legend><div class="grille">${g.champs.map(champ).join('')}</div></fieldset>`).join('')}
+  <fieldset><legend>Consentement</legend>
+    <label class="case"><input type="checkbox" name="consentRgpd" data-champ-client${c.consentRgpd ? ' checked' : ''}><span>${esc(TEXTE_RGPD)}</span></label>
+    <p class="sous" id="rgpdDate" style="margin:6px 0 0 27px">${c.consentRgpd && c.consentRgpdDate ? `Accord noté le ${fmtDate(c.consentRgpdDate)}` : ''}</p>
+  </fieldset>
+  <p class="sous">Les modifications sont enregistrées au fur et à mesure.</p>
+  <div class="actions" style="margin-top:28px"><button type="button" class="btn danger" data-action="client-supprimer">Supprimer cette fiche</button></div>
+  </form>`;
+}
+
+/* ---------- Santé ---------- */
+function sectionsDepuisReponses(reps){
+  const out = [];
+  for (const r of reps) {
+    let s = out.find(x => x.titre === r.section);
+    if (!s) { s = {titre:r.section, annexe:r.type === 'accord', questions:[]}; out.push(s); }
+    const q = clone(r); delete q.value; delete q.autreValeur; delete q.reponsesPrecisions; delete q.section;
+    s.questions.push(q);
+  }
+  return out;
+}
+const structureDe = q => (q && q.modeleId !== MODELE.id) ? sectionsDepuisReponses(q.reponses) : MODELE.sections;
+
+function htmlSante(c){
+  if (ui.questMode) return htmlFormQuestionnaire(c);
+  const qs = questionnairesDe(c.id);
+  const vue = (ui.questVue && qs.find(q => q.id === ui.questVue)) || qs[0];
+  return `<section class="bloc"><h2 class="titre-bloc">Tes précautions</h2>
+    <p class="aide">Ce que tu veux avoir en tête à chaque séance : zones à éviter, pression, sensibilités. Ce texte s'affiche en haut de la fiche et dans chaque nouvelle séance.</p>
+    <textarea name="precautions" data-champ-client rows="3" aria-label="Tes précautions">${esc(c.precautions || '')}</textarea></section>
+  <section class="bloc">${qs.length ? htmlVueQuestionnaire(c, vue, qs) : `<h2 class="titre-bloc">Questionnaire de santé</h2>
+    <div class="vide"><p>Aucun questionnaire rempli pour l'instant. Tu peux le remplir ici avec la personne, ou imprimer l'exemplaire papier, le lui faire remplir et signer, puis reporter ses réponses.</p>
+    <div class="actions"><button class="btn btn-plein" data-action="quest-nouveau">Remplir le questionnaire</button><button class="btn" data-action="quest-imprimer-vierge">Imprimer un exemplaire vierge</button></div></div>`}</section>`;
+}
+function htmlValeur(r){
+  const nr = '<span class="non-rens">Non renseigné</span>';
+  if (r.type === 'cases') {
+    const ch = (r.value || []).map(v => { const op = (r.options || []).find(x => x.v === v); return `<span class="puce ${op && op.niveau || ''}">${esc(v)}</span>`; });
+    if (r.autreValeur) ch.push(`<span class="puce ${r.autreNiveau || ''}">${esc(r.autre)} : ${esc(r.autreValeur)}</span>`);
+    return ch.length ? `<span class="puces">${ch.join('')}</span>` : nr;
+  }
+  const precisionsDe = htmlPrecisions;
+  if (r.type === 'choix') { if (!r.value) return precisionsDe(r) || nr; const op = (r.options || []).find(x => x.v === r.value); return `<span class="puce ${op && op.niveau || ''}">${esc(r.value)}</span>${precisionsDe(r)}`; }
+  if (r.type === 'ouinon') {
+    if (!r.value) return nr;
+    const cl = r.value === 'oui' && r.niveauOui ? r.niveauOui : '';
+    return `<span class="puce ${cl}">${r.value === 'oui' ? 'Oui' : 'Non'}</span>${precisionsDe(r)}`;
+  }
+  if (r.type === 'texte') return r.value ? esc(r.value) : nr;
+  if (r.type === 'texteLong') return r.value ? `<span class="texte-long">${esc(r.value)}</span>` : nr;
+  if (r.type === 'engagements') return `<ul class="engag">${(r.options || []).map(x => { const ok = (r.value || []).includes(x.v); return `<li class="${ok ? '' : 'manque'}">${ok ? 'Coché' : 'Non coché'} : ${esc(x.v)}</li>`; }).join('')}</ul>`;
+  if (r.type === 'accord') return `<span class="${r.value ? '' : 'manque'}">${r.value ? 'Coché' : 'Non coché'}</span> : ${esc(r.label)}`;
+  return nr;
+}
+function htmlPrecisions(r){
+  return (r.precisions || []).map(x => [x.court || x.label, r.reponsesPrecisions && r.reponsesPrecisions[x.id]]).filter(x => x[1]).map(([l, v]) => `<div class="sous-rep">${esc(l)} : ${esc(v)}</div>`).join('');
+}
+// Réponses d'une section ; les listes de questions Oui / Non (antécédents) sont regroupées : d'abord les « Oui », puis les « Non »
+function htmlReponses(reps){
+  const plein = r => ['engagements','accord'].includes(r.type);
+  const ligne = r => `<div class="rep${plein(r) ? ' plein' : ''}">${plein(r) ? '' : `<dt>${esc(r.label)}</dt>`}<dd>${htmlValeur(r)}</dd></div>`;
+  const compacts = reps.filter(r => r.type === 'ouinon' && r.compact);
+  if (compacts.length < 2) return reps.map(ligne).join('');
+  const nom = r => esc(r.court || r.label);
+  const oui = compacts.filter(r => r.value === 'oui'), non = compacts.filter(r => r.value === 'non'), vides = compacts.filter(r => !r.value);
+  let h = `<div class="rep"><dt>Oui</dt><dd>${oui.length ? `<div style="display:grid;gap:8px">${oui.map(r => `<div><span class="puce ${r.niveauOui || ''}">${nom(r)}</span>${htmlPrecisions(r)}</div>`).join('')}</div>` : '<span class="non-rens">Aucune réponse « Oui »</span>'}</dd></div>`;
+  if (non.length) h += `<div class="rep"><dt>Non</dt><dd class="non-liste">${non.map(nom).join(' · ')}</dd></div>`;
+  if (vides.length) h += `<div class="rep"><dt>Sans réponse</dt><dd class="non-liste manque">${vides.map(nom).join(' · ')}</dd></div>`;
+  return h + reps.filter(r => !compacts.includes(r)).map(ligne).join('');
+}
+const etiquetteModele = q => { const m = modeleDe(q); return m.court ? `<span class="badge-modele">${esc(m.court)}</span>` : ''; };
+function htmlVueQuestionnaire(c, q, qs){
+  const dernier = q.id === qs[0].id;
+  const sections = [];
+  for (const r of q.reponses) { let s = sections.find(x => x[0] === r.section); if (!s) { s = [r.section, []]; sections.push(s); } s[1].push(r); }
+  let n = 0;
+  return `<div class="titre-ligne"><h2 class="titre-bloc">Questionnaire du ${fmtDate(q.date)}${etiquetteModele(q)}</h2>${dernier ? '' : '<span class="badge">Version précédente</span>'}</div>
+  <div class="actions" style="margin-bottom:8px">
+    ${dernier ? '<button class="btn btn-plein" data-action="quest-maj">Mettre à jour</button>' : `<button class="btn" data-action="quest-voir" data-id="${qs[0].id}">Revenir à la version actuelle</button>`}
+    <button class="btn" data-action="quest-modifier" data-id="${q.id}">Corriger</button>
+    <button class="btn" data-action="quest-imprimer" data-id="${q.id}">Imprimer pour signature</button>
+  </div>
+  <p class="aide">${q.modeleId === MODELE.id ? "« Mettre à jour » crée une nouvelle version datée à partir de celle-ci et garde l'ancienne dans l'historique." : `« Mettre à jour » crée un nouveau questionnaire au modèle ${esc(MODELE.court)}, et garde celui-ci dans l'historique.`} « Corriger » modifie cette version.</p>
+  ${sections.map(([titre, reps]) => { const annexe = reps.some(r => r.type === 'accord'); if (!annexe) n++; return `<h3 class="sous-titre">${annexe ? '' : n + '. '}${esc(titre)}</h3><dl class="reponses">${htmlReponses(reps)}</dl>`; }).join('')}
+  ${qs.length > 1 ? `<h3 class="sous-titre">Historique</h3><ul class="historique">${qs.map((x, i) => `<li>${x.id === q.id ? `<strong>Questionnaire du ${fmtDate(x.date)}</strong>` : `<button class="lien" data-action="quest-voir" data-id="${x.id}">Questionnaire du ${fmtDate(x.date)}</button>`}${modeleDe(x).court ? ` <span class="sous">${esc(modeleDe(x).court)}</span>` : ''}${i === 0 ? ' <span class="sous">(version actuelle)</span>' : ''}</li>`).join('')}</ul>` : ''}`;
+}
+function htmlQuestion(qd, r){
+  const n = 'q_' + qd.id;
+  if (qd.type === 'cases') {
+    const vals = new Set(r && r.value || []);
+    return `<div class="q-question"><span class="q-label" id="l-${n}">${esc(qd.label)}</span>
+      <div class="cases" role="group" aria-labelledby="l-${n}">${qd.options.map(op => `<label><input type="checkbox" name="${n}" value="${esc(op.v)}"${vals.has(op.v) ? ' checked' : ''}${op.niveau ? ` data-niveau="${op.niveau}"` : ''}${op.aucun ? ' data-aucun' : ''}><span>${esc(op.v)}</span></label>`).join('')}</div>
+      ${qd.autre ? `<div class="precisions"><div class="champ"><label for="${n}__autre">${esc(qd.autre)}</label><input type="text" id="${n}__autre" name="${n}__autre" value="${esc(r && r.autreValeur || '')}" autocomplete="off"></div></div>` : ''}</div>`;
+  }
+  if (qd.type === 'choix' || qd.type === 'ouinon') {
+    const ops = qd.type === 'ouinon' ? [{v:'oui', l:'Oui', niveau:qd.niveauOui}, {v:'non', l:'Non'}] : qd.options.map(x => ({v:x.v, l:x.v, niveau:x.niveau}));
+    const v = r && r.value || '';
+    return `<div class="q-question${qd.compact ? ' compact' : ''}"><span class="q-label" id="l-${n}">${esc(qd.label)}</span>
+      <div class="segment" role="radiogroup" aria-labelledby="l-${n}">${ops.map((x, i) => `<input type="radio" id="${n}_${i}" name="${n}" value="${esc(x.v)}"${v === x.v ? ' checked' : ''}${x.niveau ? ` data-niveau="${x.niveau}"` : ''}><label for="${n}_${i}">${esc(x.l)}</label>`).join('')}</div>
+      ${qd.precisions ? `<div class="precisions${qd.precisionsSiOui ? ' si-oui' : ''}">${qd.precisions.map(p => `<div class="champ"><label for="${n}__${p.id}">${esc(p.label)}</label><input type="text" id="${n}__${p.id}" name="${n}__${p.id}" value="${esc(r && r.reponsesPrecisions && r.reponsesPrecisions[p.id] || '')}" autocomplete="off"></div>`).join('')}</div>` : ''}</div>`;
+  }
+  if (qd.type === 'texte') return `<div class="q-question"><div class="champ"><label for="${n}">${esc(qd.label)}</label><input type="text" id="${n}" name="${n}" value="${esc(r && r.value || '')}" autocomplete="off"></div></div>`;
+  if (qd.type === 'texteLong') return `<div class="q-question"><div class="champ"><label for="${n}">${esc(qd.label)}</label><textarea id="${n}" name="${n}" rows="3">${esc(r && r.value || '')}</textarea></div></div>`;
+  if (qd.type === 'engagements') { const vals = new Set(r && r.value || []); return `<div class="q-question" style="display:grid;gap:8px">${qd.options.map(op => `<label class="case"><input type="checkbox" name="${n}" value="${esc(op.v)}"${vals.has(op.v) ? ' checked' : ''}><span>${esc(op.v)}</span></label>`).join('')}</div>`; }
+  if (qd.type === 'accord') return `<div class="q-question"><label class="case"><input type="checkbox" name="${n}"${r && r.value ? ' checked' : ''}><span>${esc(qd.label)}</span></label></div>`;
+  return '';
+}
+function htmlFormQuestionnaire(c){
+  const m = ui.questMode;
+  const q = m.id ? etat.questionnaires.find(x => x.id === m.id) : null;
+  const base = q || (m.baseId ? etat.questionnaires.find(x => x.id === m.baseId) : null);
+  const M = modeleDe(q);
+  const sections = structureDe(q);
+  // Les réponses d'un questionnaire d'un autre modèle ne sont pas reprises : les questions ne sont pas les mêmes
+  const autreModele = !q && base && base.modeleId !== M.id;
+  const R = autreModele ? {} : Object.fromEntries((base && base.reponses || []).map(r => [r.id, r]));
+  const repris = (M.identite || ANCIEN.identite).map(([l, f, facultatif]) => [l, f(c), facultatif]);
+  let n = 0;
+  return `<form id="formQuest" novalidate autocomplete="off">
+  <div class="titre-ligne"><h2 class="titre-bloc">${q ? 'Corriger le questionnaire' : base ? 'Mettre à jour le questionnaire' : 'Remplir le questionnaire'}${M.court ? `<span class="badge-modele">${esc(M.court)}</span>` : ''}</h2></div>
+  ${autreModele ? `<p class="aide">Nouveau modèle ${esc(M.court)} : les réponses du questionnaire du ${fmtDate(base.date)} ne sont pas reprises, car les questions ont changé. Il reste consultable dans l'historique.</p>` : ''}
+  ${M.info ? `<div class="encadre" role="note"><strong>${esc(M.info.titre)}</strong><p>${esc(M.info.texte)}</p></div>` : M.intro ? `<p class="aide">${esc(M.intro)}</p>` : ''}
+  <fieldset class="q-section"><legend>Informations générales</legend>
+    <div class="repris">${repris.map(([l, v, facultatif]) => `<span>${l} : ${v ? esc(v) : facultatif ? '<span class="non-rens">non renseigné</span>' : '<span class="manque">à compléter dans l\'identité</span>'}</span>`).join('')}</div>
+    <div class="champ" style="max-width:220px;margin-top:12px"><label for="q-date">${esc(M.libelleDate || 'Date')}</label><input type="date" id="q-date" name="__date" value="${esc(q ? q.date : aujourdhui())}" required></div>
+  </fieldset>
+  ${sections.map(s => { if (!s.annexe) n++; return `<fieldset class="q-section"><legend>${s.annexe ? '' : `<span class="q-num">${n}.</span>`}<span>${esc(s.titre)}</span></legend>
+    ${s.aide ? `<p class="aide">${esc(s.aide)}</p>` : ''}
+    ${s.annexe ? htmlAnnexe(M) : ''}
+    ${s.questions.map(qd => htmlQuestion(qd, R[qd.id])).join('')}
+    ${s.alerte ? `<div class="alerte" role="note"><strong>${esc(s.alerte.titre)}</strong><ul>${s.alerte.lignes.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>` : ''}</fieldset>`; }).join('')}
+  ${M.pied ? `<p class="aide" style="margin-bottom:16px">${esc(M.pied)}</p>` : ''}
+  <p class="erreur-form" id="questErreur" hidden></p>
+  <div class="actions"><button type="submit" class="btn btn-plein">Enregistrer le questionnaire</button><button type="button" class="btn" data-action="quest-annuler">Annuler</button>${q ? `<span style="flex:1"></span><button type="button" class="btn danger" data-action="quest-supprimer" data-id="${q.id}">Supprimer ce questionnaire</button>` : ''}</div>
+  </form>`;
+}
+function htmlAnnexe(M){
+  const a = M && M.annexe;
+  if (!a) return '';
+  return `<div class="annexe"><p>${esc(a.intro)}</p>${a.listes.map(l => `<p style="margin:10px 0 0"><strong>${esc(l.titre)}</strong></p><ul>${l.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}<p style="margin:0">${esc(a.avertissement)}</p></div>`;
+}
+function lireQuestionnaire(form, sections){
+  const fd = new FormData(form);
+  const out = [];
+  for (const s of sections) for (const qd of s.questions) {
+    const n = 'q_' + qd.id;
+    const r = Object.assign(clone(qd), {section:s.titre});
+    if (qd.type === 'cases' || qd.type === 'engagements') r.value = fd.getAll(n).map(String);
+    else if (qd.type === 'accord') r.value = fd.get(n) != null;
+    else r.value = String(fd.get(n) || '').trim();
+    if (qd.autre) r.autreValeur = String(fd.get(n + '__autre') || '').trim();
+    if (qd.precisions) r.reponsesPrecisions = Object.fromEntries(qd.precisions.map(p => [p.id, qd.precisionsSiOui && r.value !== 'oui' ? '' : String(fd.get(`${n}__${p.id}`) || '').trim()]));
+    out.push(r);
+  }
+  return out;
+}
+function enregistrerQuestionnaire(form){
+  const c = client(ui.clientId); const m = ui.questMode;
+  const q = m.id ? etat.questionnaires.find(x => x.id === m.id) : null;
+  const sections = structureDe(q);
+  const date = form.elements.__date.value;
+  if (!date) { const e = $('#questErreur'); e.textContent = 'Indique la date du questionnaire.'; e.hidden = false; form.elements.__date.focus(); return; }
+  const reponses = lireQuestionnaire(form, sections);
+  const maintenant = new Date().toISOString();
+  if (q) Object.assign(q, {date, reponses, majLe:maintenant});
+  else etat.questionnaires.push({id:uid(), clientId:c.id, date, modeleId:MODELE.id, modeleNom:MODELE.nom, reponses, creeLe:maintenant, majLe:maintenant});
+  ui.questMode = null; ui.questVue = null;
+  enregistrer();
+  render();
+  toast('Questionnaire enregistré');
+}
+
+/* ---------- Séances ---------- */
+function resumeZones(zones){
+  zones = zones || [];
+  if (!zones.length) return 'Zones non précisées';
+  if (zones.length === ZONES.length) return 'Protocole complet (8 zones)';
+  return majuscule(ZONES.filter(z => zones.includes(z.id)).map(z => z.label.toLowerCase()).join(', '));
+}
+function resumeMesures(s){
+  const av = s.mesures && s.mesures.avant || {}, ap = s.mesures && s.mesures.apres || {};
+  const items = MESURES.filter(([k]) => av[k] != null && ap[k] != null).slice(0, 3).map(([k, l]) => `${l} ${fmtNum(av[k])} → ${fmtNum(ap[k])} cm`);
+  return items.length ? `<span class="extrait">${esc(items.join(' ; '))}</span>` : '';
+}
+function htmlSeances(c){
+  const ss = seancesDe(c.id);
+  return `<div class="titre-ligne"><h2 class="titre-bloc">Suivi des séances</h2><button class="btn btn-plein" data-action="seance-nouvelle">Nouvelle séance</button></div>
+  ${htmlEvolution(ss)}
+  ${ss.length ? `<ol class="seances">${ss.map(s => {
+    const d = versDate(s.date);
+    const f = etat.factures.find(x => x.seanceId === s.id);
+    const infos = [s.duree ? `${fmtNum(s.duree)} min` : null, s.heure ? `à ${s.heure.replace(':', 'h')}` : null, s.pression ? `pression ${s.pression.toLowerCase()}` : null, s.tarif != null ? eur(s.tarif) : null].filter(Boolean).join(', ');
+    return `<li><button class="seance" data-action="seance-ouvrir" data-id="${s.id}">
+      <span class="date-rail"><span class="jour">${d ? d.getDate() : '?'}</span><span class="mois">${d ? d.toLocaleDateString('fr-FR', {month:'short'}) + ' ' + d.getFullYear() : ''}</span></span>
+      <span class="seance-corps"><span class="seance-titre">${esc(s.type || 'Séance')}${f ? `<span class="badge">Facture n° ${esc(f.numero)}</span>` : ''}</span>
+      ${infos ? `<span class="sous">${esc(infos)}</span>` : ''}
+      <span class="extrait">${esc(resumeZones(s.zones))}</span>
+      ${s.controle && s.controle.changement === 'oui' ? `<span class="note-alerte">Changement de santé signalé${s.controle.note ? ` : ${esc(s.controle.note)}` : ''}</span>` : ''}
+      ${resumeMesures(s)}
+      ${s.observations ? `<span class="extrait">${esc(tronquer(s.observations, 180))}</span>` : ''}</span></button></li>`;
+  }).join('')}</ol>` : `<div class="vide"><p>Aucune séance enregistrée. Tu peux créer la séance au début du rendez-vous pour noter le contrôle santé et les mesures de départ, puis la compléter à la fin.</p></div>`}`;
+}
+
+/* Graphique d'évolution des mesures */
+function donneesMesures(ss){
+  const asc = ss.slice().reverse();
+  return MESURES.map(([k, l]) => ({k, l, data:asc.map(s => ({date:s.date, avant:s.mesures && s.mesures.avant ? s.mesures.avant[k] ?? null : null, apres:s.mesures && s.mesures.apres ? s.mesures.apres[k] ?? null : null})).filter(d => d.avant != null || d.apres != null)})).filter(m => m.data.length >= 2);
+}
+function htmlEvolution(ss){
+  const ms = donneesMesures(ss);
+  if (!ms.length) return '';
+  const m = ms.find(x => x.k === ui.mesure) || ms[0];
+  const ref = d => d.avant != null ? d.avant : d.apres;
+  const prem = m.data[0], der = m.data[m.data.length - 1];
+  const delta = ref(der) - ref(prem);
+  const resume = `${fmtNum(ref(prem))} cm le ${fmtDate(prem.date, {day:'numeric', month:'long'})}, ${fmtNum(ref(der))} cm le ${fmtDate(der.date, {day:'numeric', month:'long'})} : ${delta === 0 ? 'stable' : (delta > 0 ? '+' : '−') + fmtNum(Math.abs(delta)) + ' cm'}.`;
+  return `<section class="graph-zone" aria-label="Évolution des mesures">
+    <div class="graph-tete"><strong>Évolution des mesures</strong>
+      <label class="sous">Mesure <select id="choixMesure">${ms.map(x => `<option value="${x.k}"${x.k === m.k ? ' selected' : ''}>${esc(x.l)}</option>`).join('')}</select></label></div>
+    <p class="resume-graph">${esc(m.l)} : ${esc(resume)}</p>
+    ${svgGraph(m)}
+    <div class="legende-graph"><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--lagon)"/></svg>Avant la séance</span><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="var(--papier)" stroke="var(--lagon)" stroke-width="2"/></svg>Après la séance</span></div>
+    <details class="valeurs"><summary>Voir les valeurs</summary><table><thead><tr><th>Date</th><th>Avant</th><th>Après</th></tr></thead><tbody>${m.data.map(d => `<tr><td>${fmtDate(d.date)}</td><td>${d.avant != null ? fmtNum(d.avant) + ' cm' : ''}</td><td>${d.apres != null ? fmtNum(d.apres) + ' cm' : ''}</td></tr>`).join('')}</tbody></table></details>
+    <div class="infobulle" id="infobulle" hidden></div></section>`;
+}
+function svgGraph(m){
+  const W = 640, H = 220, ml = 44, mr = 20, mt = 14, mb = 30, iw = W - ml - mr, ih = H - mt - mb;
+  const vals = m.data.flatMap(d => [d.avant, d.apres]).filter(v => v != null);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 2) { const c = (hi + lo) / 2; lo = c - 1; hi = c + 1; }
+  const marge = (hi - lo) * 0.15; lo -= marge; hi += marge;
+  const pas = [0.5, 1, 2, 5, 10, 20, 50].find(p => (hi - lo) / p <= 5) || 100;
+  const ticks = []; for (let v = Math.ceil(lo / pas) * pas; v <= hi + 1e-9; v += pas) ticks.push(Math.round(v * 100) / 100);
+  const ts = m.data.map(d => versDate(d.date).getTime()); const t0 = Math.min(...ts), t1 = Math.max(...ts);
+  const X = t => t1 === t0 ? ml + iw / 2 : ml + (t - t0) / (t1 - t0) * iw;
+  const Y = v => mt + (hi - v) / (hi - lo) * ih;
+  const xs = ts.map(X);
+  const lab = [0]; for (let i = 1; i < m.data.length - 1; i++) if (xs[i] - xs[lab[lab.length - 1]] >= 72 && xs[m.data.length - 1] - xs[i] >= 72) lab.push(i);
+  if (m.data.length > 1) lab.push(m.data.length - 1);
+  const pts = m.data.map((d, i) => ({...d, x:xs[i]}));
+  const ligne = pts.filter(p => p.avant != null).map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${Y(p.avant).toFixed(1)}`).join(' ');
+  const tip = p => `${fmtDate(p.date, {day:'numeric', month:'short', year:'numeric'})} : ${[p.avant != null ? fmtNum(p.avant) + ' cm avant' : null, p.apres != null ? fmtNum(p.apres) + ' cm après' : null].filter(Boolean).join(', ')}`;
+  return `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="Courbe ${esc(m.l)}">
+    ${ticks.map(v => `<line class="g-grille" x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="g-axe" x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${fmtNum(v)}</text>`).join('')}
+    ${lab.map((i, j) => `<text class="g-axe" x="${xs[i].toFixed(1)}" y="${H - 8}" text-anchor="${lab.length > 1 && j === 0 ? 'start' : lab.length > 1 && j === lab.length - 1 ? 'end' : 'middle'}">${fmtDate(m.data[i].date, {day:'numeric', month:'short'})}</text>`).join('')}
+    ${pts.filter(p => p.avant != null && p.apres != null).map(p => `<line class="g-lien" x1="${p.x.toFixed(1)}" x2="${p.x.toFixed(1)}" y1="${Y(p.avant).toFixed(1)}" y2="${Y(p.apres).toFixed(1)}"/>`).join('')}
+    ${ligne ? `<path class="g-ligne" d="${ligne}"/>` : ''}
+    ${pts.filter(p => p.apres != null).map(p => `<circle class="g-apres" cx="${p.x.toFixed(1)}" cy="${Y(p.apres).toFixed(1)}" r="4.5"/>`).join('')}
+    ${pts.filter(p => p.avant != null).map(p => `<circle class="g-avant" cx="${p.x.toFixed(1)}" cy="${Y(p.avant).toFixed(1)}" r="5"/>`).join('')}
+    ${pts.map(p => `<circle class="g-cible" cx="${p.x.toFixed(1)}" cy="${Y(p.avant != null ? p.avant : p.apres).toFixed(1)}" r="14" tabindex="0" data-tip="${esc(tip(p))}" aria-label="${esc(tip(p))}"/>`).join('')}
+  </svg>`;
+}
+function brancherGraph(){
+  const zone = $('.graph-zone'); if (!zone) return;
+  const bulle = $('#infobulle', zone);
+  const montrer = el => { const r = el.getBoundingClientRect(), z = zone.getBoundingClientRect(); bulle.textContent = el.dataset.tip; bulle.style.left = (r.left + r.width / 2 - z.left) + 'px'; bulle.style.top = (r.top + r.height / 2 - z.top - 4) + 'px'; bulle.hidden = false; };
+  $$('.g-cible', zone).forEach(el => { el.addEventListener('pointerenter', () => montrer(el)); el.addEventListener('focus', () => montrer(el)); el.addEventListener('pointerleave', () => { bulle.hidden = true; }); el.addEventListener('blur', () => { bulle.hidden = true; }); });
+}
+
+/* Silhouette des zones */
+function htmlCorps(sel){
+  const zone = (z, i) => { const g = GEO[z.id], on = sel.has(z.id); return `<rect class="zone" data-zone="${z.id}" role="button" tabindex="0" aria-pressed="${on}" aria-label="${i + 1}. ${esc(z.label)}" x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="${g.rx}"><title>${i + 1}. ${esc(z.label)}</title></rect><text class="num${on ? ' on' : ''}" data-num="${z.id}" x="${g.x + g.w / 2}" y="${g.y + g.h / 2 + 4}">${i + 1}</text>`; };
+  return `<svg class="corps" viewBox="0 0 360 316" role="group" aria-label="Zones drainées, numérotées dans l'ordre du protocole">
+    <g aria-hidden="true">
+      <circle class="neutre" cx="90" cy="26" r="15"/><rect class="neutre" x="84" y="40" width="12" height="11" rx="3"/><rect class="neutre" x="62" y="50" width="56" height="46" rx="14"/>
+      <circle class="neutre" cx="270" cy="26" r="15"/><rect class="neutre" x="264" y="40" width="12" height="11" rx="3"/>
+      <rect class="neutre" x="220" y="54" width="18" height="104" rx="9"/><rect class="neutre" x="302" y="54" width="18" height="104" rx="9"/>
+      <text class="cote" x="49" y="176">D</text><text class="cote" x="131" y="176">G</text><text class="cote" x="229" y="176">G</text><text class="cote" x="311" y="176">D</text>
+      <text class="legende" x="90" y="306">Face, sur le dos</text><text class="legende" x="270" y="306">Dos, sur le ventre</text>
+    </g>
+    ${ZONES.map(zone).join('')}
+  </svg>`;
+}
+function htmlOrdre(sel){ return ZONES.map((z, i) => `<li class="${sel.has(z.id) ? 'on' : ''}">${esc(z.label)}</li>`).join(''); }
+
+function ouvrirSeance(c, id){
+  const s = id ? etat.seances.find(x => x.id === id) : null;
+  const toutes = seancesDe(c.id);
+  const prec = s ? toutes.find(x => x.id !== s.id && cleSeance(x) < cleSeance(s)) : toutes[0];
+  const v = s ? clone(s) : { date:aujourdhui(), heure:'', duree:60, type:prec && prec.type || TYPES[0], pression:prec && prec.pression || '', zones:prec && prec.zones && prec.zones.length ? prec.zones.slice() : ZONES.map(z => z.id), controle:{}, mesures:{avant:{}, apres:{}}, tarif:null, regle:false, moyen:'' };
+  if (!s && v.tarif == null) v.tarif = tarifPour(v.type);
+  const sel = new Set(v.zones || []);
+  const av = v.mesures && v.mesures.avant || {}, ap = v.mesures && v.mesures.apres || {};
+  const pav = prec && prec.mesures && prec.mesures.avant || {};
+  const aMesures = Object.keys(av).length || Object.keys(ap).length;
+  const types = [...new Set([...TYPES, ...etat.reglages.tarifs.map(t => t.designation).filter(Boolean)])];
+  const facture = s ? etat.factures.find(x => x.seanceId === s.id) : null;
+  const ctrl = v.controle || {};
+  const dlg = $('#dlg'); dlg.className = '';
+  dlg.innerHTML = `<form id="formSeance" novalidate autocomplete="off">
+  <header class="dlg-tete"><h2 id="dlgTitre">${s ? 'Séance du ' + fmtDate(s.date) : 'Nouvelle séance'}</h2><p class="sous">${esc(nomComplet(c))}</p></header>
+  <div class="dlg-corps">
+    ${htmlAlertes(c, false)}
+    <div class="grille g4" style="margin:16px 0 14px">
+      <div class="champ"><label for="s-date">Date</label><input type="date" id="s-date" name="date" value="${esc(v.date)}" required></div>
+      <div class="champ"><label for="s-heure">Heure</label><input type="time" id="s-heure" name="heure" value="${esc(v.heure || '')}"></div>
+      <div class="champ"><label for="s-duree">Durée (min)</label><input type="text" inputmode="numeric" id="s-duree" name="duree" value="${esc(fmtNum(v.duree))}"></div>
+      <div class="champ"><label for="s-pression">Pression</label><select id="s-pression" name="pression"><option value=""></option>${PRESSIONS.map(p => `<option${v.pression === p ? ' selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="champ large"><label for="s-type">Type de séance</label><input type="text" id="s-type" name="type" list="typesListe" value="${esc(v.type || '')}"><datalist id="typesListe">${types.map(t => `<option value="${esc(t)}">`).join('')}</datalist></div>
+    </div>
+    <fieldset><legend>Avant de commencer</legend>
+      <div class="q-question" style="border:0;padding-top:0"><span class="q-label" id="l-ctrl">Un changement de santé depuis la dernière séance ou depuis le questionnaire ?</span>
+      <div class="segment" role="radiogroup" aria-labelledby="l-ctrl"><input type="radio" id="ctrl-o" name="controle" value="oui"${ctrl.changement === 'oui' ? ' checked' : ''} data-niveau="orange"><label for="ctrl-o">Oui</label><input type="radio" id="ctrl-n" name="controle" value="non"${ctrl.changement === 'non' ? ' checked' : ''}><label for="ctrl-n">Non</label></div>
+      <div class="precisions"><div class="champ"><label for="ctrl-note">Lequel ?</label><input type="text" id="ctrl-note" name="controleNote" value="${esc(ctrl.note || '')}"></div></div></div>
+      <div class="champ"><label for="s-ravant">Ressenti de la personne en arrivant</label><textarea id="s-ravant" name="ressentiAvant" rows="2">${esc(v.ressentiAvant || '')}</textarea></div>
+    </fieldset>
+    <fieldset><legend>Zones drainées</legend>
+      <div class="carte-corps">${htmlCorps(sel)}
+        <div><p class="aide" style="margin-top:0">Touche une zone pour l'ajouter ou la retirer. Les numéros suivent l'ordre de ton protocole.</p>
+        <ol class="ordre" id="ordreZones">${htmlOrdre(sel)}</ol>
+        <div class="actions" style="margin-top:12px"><button type="button" class="btn petit" data-dlg="zones-tout">Protocole complet</button><button type="button" class="btn petit" data-dlg="zones-aucun">Tout retirer</button></div></div>
+      </div>
+    </fieldset>
+    <details class="bloc"${aMesures ? ' open' : ''}><summary>Mensurations (cm)</summary>
+      <table class="mesures"><thead><tr><th>Mesure</th><th>Avant</th><th>Après</th></tr></thead><tbody>
+      ${MESURES.map(([k, l]) => `<tr><th scope="row">${l}</th><td><input type="text" inputmode="decimal" name="av_${k}" value="${esc(fmtNum(av[k]))}" placeholder="${pav[k] != null ? 'préc. ' + fmtNum(pav[k]) : ''}" aria-label="${l} avant"></td><td><input type="text" inputmode="decimal" name="ap_${k}" value="${esc(fmtNum(ap[k]))}" aria-label="${l} après"></td></tr>`).join('')}
+      <tr><th scope="row">Poids (kg)</th><td><input type="text" inputmode="decimal" name="poids" value="${esc(fmtNum(v.poids))}" aria-label="Poids en kilos"></td><td></td></tr>
+      </tbody></table>
+    </details>
+    <fieldset><legend>Déroulé</legend>
+      <div class="grille">
+        <div class="champ large"><label for="s-obs">Tes observations (peau, œdème, réactions, adaptations du protocole)</label><textarea id="s-obs" name="observations" rows="3">${esc(v.observations || '')}</textarea></div>
+        <div class="champ"><label for="s-rapres">Ressenti de la personne après</label><textarea id="s-rapres" name="ressentiApres" rows="2">${esc(v.ressentiApres || '')}</textarea></div>
+        <div class="champ"><label for="s-conseils">Conseils donnés</label><textarea id="s-conseils" name="conseils" rows="2">${esc(v.conseils || '')}</textarea></div>
+      </div>
+    </fieldset>
+    <fieldset><legend>Suite et règlement</legend>
+      <div class="grille g4">
+        <div class="champ"><label for="s-proch">Prochaine séance conseillée</label><input type="date" id="s-proch" name="prochaine" value="${esc(v.prochaine || '')}"></div>
+        <div class="champ"><label for="s-tarif">Tarif (€)</label><input type="text" inputmode="decimal" id="s-tarif" name="tarif" value="${esc(fmtNum(v.tarif))}"></div>
+        <div class="champ"><label for="s-moyen">Moyen de paiement</label><select id="s-moyen" name="moyen"><option value=""></option>${MOYENS.map(x => `<option${v.moyen === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
+        <div class="champ" style="justify-content:flex-end"><label class="case" style="padding-bottom:9px"><input type="checkbox" name="regle"${v.regle ? ' checked' : ''}><span>Réglée</span></label></div>
+      </div>
+    </fieldset>
+    <p class="erreur-form" id="seanceErreur" hidden></p>
+  </div>
+  <footer class="dlg-pied">
+    ${s ? '<button type="button" class="btn danger" data-dlg="supprimer">Supprimer</button>' : ''}
+    ${s ? `<button type="button" class="btn" data-dlg="facturer">${facture ? `Voir la facture n° ${esc(facture.numero)}` : 'Facturer cette séance'}</button>` : ''}
+    <span class="espace"></span>
+    <button type="button" class="btn" data-dlg="fermer">Annuler</button>
+    <button type="submit" class="btn btn-plein">Enregistrer la séance</button>
+  </footer></form>`;
+  const form = $('#formSeance');
+  const majZones = () => { $$('[data-zone]', dlg).forEach(el => el.setAttribute('aria-pressed', sel.has(el.dataset.zone))); $$('[data-num]', dlg).forEach(el => el.classList.toggle('on', sel.has(el.dataset.num))); $('#ordreZones').innerHTML = htmlOrdre(sel); dlg.dataset.sale = '1'; };
+  const basculer = el => { const z = el.dataset.zone; sel.has(z) ? sel.delete(z) : sel.add(z); majZones(); };
+  $$('[data-zone]', dlg).forEach(el => { el.addEventListener('click', () => basculer(el)); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculer(el); } }); });
+  form.elements.type.addEventListener('change', () => { const t = tarifPour(form.elements.type.value); if (t != null && !form.elements.tarif.value) form.elements.tarif.value = fmtNum(t); });
+  const sauver = () => {
+    const fd = new FormData(form);
+    const date = String(fd.get('date') || '');
+    if (!date) { const e = $('#seanceErreur'); e.textContent = 'Indique la date de la séance.'; e.hidden = false; form.elements.date.focus(); return null; }
+    const mes = {avant:{}, apres:{}};
+    for (const [k] of MESURES) { const a = num(fd.get('av_' + k)), b = num(fd.get('ap_' + k)); if (a != null) mes.avant[k] = a; if (b != null) mes.apres[k] = b; }
+    const maintenant = new Date().toISOString();
+    const donnees = { clientId:c.id, date, heure:String(fd.get('heure') || ''), duree:num(fd.get('duree')), type:String(fd.get('type') || '').trim(), pression:String(fd.get('pression') || ''),
+      controle:{changement:String(fd.get('controle') || ''), note:String(fd.get('controleNote') || '').trim()}, ressentiAvant:String(fd.get('ressentiAvant') || '').trim(),
+      zones:ZONES.map(z => z.id).filter(z => sel.has(z)), mesures:mes, poids:num(fd.get('poids')), observations:String(fd.get('observations') || '').trim(),
+      ressentiApres:String(fd.get('ressentiApres') || '').trim(), conseils:String(fd.get('conseils') || '').trim(), prochaine:String(fd.get('prochaine') || ''),
+      tarif:num(fd.get('tarif')), moyen:String(fd.get('moyen') || ''), regle:fd.get('regle') != null, majLe:maintenant };
+    let rec = s;
+    if (rec) Object.assign(rec, donnees); else { rec = {id:uid(), creeLe:maintenant, ...donnees}; etat.seances.push(rec); }
+    enregistrer();
+    return rec;
+  };
+  ouvrirDialogue({
+    sale:false,
+    submit: () => { if (sauver()) { fermerDialogue(); render(); toast('Séance enregistrée'); } },
+    clic: b => {
+      const a = b.dataset.dlg;
+      if (a === 'zones-tout') { ZONES.forEach(z => sel.add(z.id)); majZones(); }
+      else if (a === 'zones-aucun') { sel.clear(); majZones(); }
+      else if (a === 'supprimer') { if (confirm(`Supprimer la séance du ${fmtDate(s.date)} ? Cette action est définitive.`)) { oublier('seances', s.id); const t = new Date().toISOString(); etat.factures.forEach(f => { if (f.seanceId === s.id) { f.seanceId = null; f.majLe = t; } }); enregistrer(); fermerDialogue(); render(); toast('Séance supprimée'); } }
+      else if (a === 'facturer') { const rec = sauver(); if (!rec) return; fermerDialogue(); render(); const f = etat.factures.find(x => x.seanceId === rec.id); ouvrirFacture(c, f ? f.id : null, rec.id); }
+    }
+  });
+}
+
+/* ---------- Factures ---------- */
+function prochainRang(annee){ return Math.max(0, ...etat.factures.filter(f => f.annee === annee).map(f => f.rang)) + 1; }
+const numeroDe = (annee, rang) => `${annee}-${pad(rang, 3)}`;
+const estDerniere = f => f.rang === Math.max(...etat.factures.filter(x => x.annee === f.annee).map(x => x.rang));
+const designationSeance = s => `${s.type || 'Séance de drainage lymphatique'}${s.duree ? ` (${fmtNum(s.duree)} min)` : ''}`;
+function adresseClient(c){ return [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(x => x && x.trim()); }
+
+function htmlFactures(c){
+  const fs = facturesDe(c.id);
+  return `<div class="titre-ligne"><h2 class="titre-bloc">Factures</h2><button class="btn btn-plein" data-action="facture-nouvelle">Nouvelle facture</button></div>
+  ${!emetteurComplet() ? '<div class="alerte orange bloc"><strong>Informations de facturation à compléter</strong><p>Ton nom, ton adresse et ton numéro SIRET doivent figurer sur chaque facture. <button class="lien" data-action="reglages">Les renseigner dans les réglages</button></p></div>' : ''}
+  ${fs.length ? `<table class="factures"><thead><tr><th>N°</th><th>Date</th><th class="col-presta">Prestation</th><th class="montant">Montant</th><th>État</th></tr></thead><tbody>
+    ${fs.map(f => `<tr><td><button class="lien" data-action="facture-ouvrir" data-id="${f.id}">${esc(f.numero)}</button></td><td>${fmtCourt(f.dateEmission)}</td><td class="col-presta">${esc(tronquer(f.lignes.map(l => l.designation).join(', '), 60))}</td><td class="montant">${eur(f.total)}</td><td><span class="etat-facture ${f.statut === 'reglee' ? '' : 'a-regler'}">${f.statut === 'reglee' ? 'Réglée' : 'À régler'}</span>${f.envois && f.envois.length ? `<div class="sous">Envoyée le ${fmtCourt(f.envois[f.envois.length - 1].le.slice(0, 10))}</div>` : ''}</td></tr>`).join('')}
+  </tbody></table>` : '<div class="vide"><p>Aucune facture pour cette personne. Tu peux en créer une ici, ou depuis une séance avec « Facturer cette séance » : la date et le tarif seront repris automatiquement.</p></div>'}`;
+}
+function partagePossible(){ try { return !!(navigator.canShare && navigator.canShare({files:[new File(['x'], 'test.pdf', {type:'application/pdf'})]})); } catch (e) { return false; } }
+
+function ouvrirFacture(c, id, seanceId){
+  const f = id ? etat.factures.find(x => x.id === id) : null;
+  const s = seanceId ? etat.seances.find(x => x.id === seanceId) : null;
+  const t0 = etat.reglages.tarifs.find(t => t.designation);
+  const v = f ? clone(f) : {
+    dateEmission:aujourdhui(), datePrestation:s ? s.date : aujourdhui(),
+    lignes:[ s ? {designation:designationSeance(s), quantite:1, prix:s.tarif != null ? s.tarif : tarifPour(s.type)} : {designation:t0 ? t0.designation : 'Séance de drainage lymphatique', quantite:1, prix:t0 ? t0.prix : null} ],
+    statut:s && s.regle ? 'reglee' : 'a-regler', moyen:s && s.moyen || '', dateReglement:s && s.regle ? s.date : '', note:'' };
+  const annee = Number((v.dateEmission || aujourdhui()).slice(0, 4));
+  const dlg = $('#dlg'); dlg.className = '';
+  const ligneHTML = l => `<tr><td><input type="text" name="designation" list="tarifsListe" value="${esc(l.designation || '')}" aria-label="Désignation"></td><td class="num-col"><input type="text" inputmode="decimal" name="quantite" value="${esc(fmtNum(l.quantite ?? 1))}" aria-label="Quantité"></td><td class="num-col"><input type="text" inputmode="decimal" name="prix" value="${esc(fmtNum(l.prix))}" aria-label="Prix unitaire en euros"></td><td class="total-col" data-total></td><td class="act-col"><button type="button" class="btn petit danger" data-dlg="ligne-retirer">Retirer</button></td></tr>`;
+  dlg.innerHTML = `<form id="formFacture" novalidate autocomplete="off">
+  <header class="dlg-tete"><h2 id="dlgTitre">${f ? `Facture n° ${esc(f.numero)}` : 'Nouvelle facture'}</h2><p class="sous">${esc(nomComplet(c))}${f ? (f.renumeroteDe ? `, renumérotée lors d'une synchronisation (elle portait le n° ${esc(f.renumeroteDe)})` : '') : `, elle portera le n° ${numeroDe(annee, prochainRang(annee))}`}</p></header>
+  <div class="dlg-corps">
+    ${!f && etat.reglages.derniereSynchro ? '<p class="aide">Tu factures aussi sur ton autre appareil ? Synchronise avant, pour que les numéros se suivent.</p>' : ''}
+    ${!emetteurComplet() ? '<div class="alerte orange bloc"><strong>Informations de facturation à compléter</strong><p>Ton nom, ton adresse et ton SIRET doivent figurer sur la facture. <button type="button" class="lien" data-dlg="reglages">Ouvrir les réglages</button></p></div>' : ''}
+    ${f ? htmlEnvoi(c, f) : ''}
+    ${!adresseClient(c).length ? `<p class="aide">L'adresse de ${esc(c.prenom || 'cette personne')} n'est pas renseignée : elle figure normalement sur la facture, sauf si la personne s'y oppose.</p>` : ''}
+    <div class="grille g4" style="margin-bottom:18px">
+      <div class="champ"><label for="f-em">Date de la facture</label><input type="date" id="f-em" name="dateEmission" value="${esc(v.dateEmission)}"${f ? ' readonly' : ''}></div>
+      <div class="champ"><label for="f-pr">Date de la prestation</label><input type="date" id="f-pr" name="datePrestation" value="${esc(v.datePrestation || '')}"></div>
+    </div>
+    <fieldset><legend>Prestations</legend>
+      <table class="lignes"><thead><tr><th>Désignation</th><th class="num-col">Quantité</th><th class="num-col">Prix unitaire (€)</th><th class="total-col">Total</th><th class="act-col"></th></tr></thead><tbody id="lignesFacture">${v.lignes.map(ligneHTML).join('')}</tbody></table>
+      <datalist id="tarifsListe">${etat.reglages.tarifs.filter(t => t.designation).map(t => `<option value="${esc(t.designation)}">`).join('')}</datalist>
+      <button type="button" class="btn petit" data-dlg="ligne-ajouter" style="margin-top:8px">Ajouter une ligne</button>
+      <p class="total-ligne"><span>Total</span><strong id="totalFacture"></strong></p>
+      <p class="mention-tva">${esc(etat.reglages.emetteur.tva || '')}</p>
+    </fieldset>
+    <fieldset><legend>Règlement</legend>
+      <div class="grille g3">
+        <div class="champ"><span class="etiquette" id="l-statut">État</span><div class="segment" role="radiogroup" aria-labelledby="l-statut"><input type="radio" id="st-a" name="statut" value="a-regler"${v.statut !== 'reglee' ? ' checked' : ''}><label for="st-a">À régler</label><input type="radio" id="st-r" name="statut" value="reglee"${v.statut === 'reglee' ? ' checked' : ''}><label for="st-r">Réglée</label></div></div>
+        <div class="champ"><label for="f-moyen">Moyen de paiement</label><select id="f-moyen" name="moyen"><option value=""></option>${MOYENS.map(x => `<option${v.moyen === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
+        <div class="champ"><label for="f-dr">Date du règlement</label><input type="date" id="f-dr" name="dateReglement" value="${esc(v.dateReglement || '')}"></div>
+      </div>
+    </fieldset>
+    <div class="champ bloc"><label for="f-note">Note sur la facture (facultatif)</label><input type="text" id="f-note" name="note" value="${esc(v.note || '')}"></div>
+    <p class="erreur-form" id="factureErreur" hidden></p>
+  </div>
+  <footer class="dlg-pied">
+    ${f && estDerniere(f) ? '<button type="button" class="btn danger" data-dlg="supprimer">Supprimer</button>' : ''}
+    <span class="espace"></span>
+    <button type="button" class="btn" data-dlg="fermer">Fermer</button>
+    <button type="submit" class="btn btn-plein">${f ? 'Enregistrer les modifications' : 'Créer la facture'}</button>
+  </footer></form>`;
+  const form = $('#formFacture');
+  const tbody = $('#lignesFacture');
+  const lireLignes = () => $$('tr', tbody).map(tr => ({designation:$('[name=designation]', tr).value.trim(), quantite:num($('[name=quantite]', tr).value), prix:num($('[name=prix]', tr).value)})).filter(l => l.designation || l.prix != null);
+  const majTotaux = () => { let t = 0; $$('tr', tbody).forEach(tr => { const q = num($('[name=quantite]', tr).value) ?? 1, p = num($('[name=prix]', tr).value); const tot = p != null ? q * p : null; $('[data-total]', tr).textContent = tot != null ? eur(tot) : ''; if (tot != null) t += tot; }); $('#totalFacture').textContent = eur(t); };
+  majTotaux();
+  form.addEventListener('input', majTotaux);
+  form.addEventListener('change', e => { if (e.target.name === 'designation') { const p = tarifPour(e.target.value); const pr = $('[name=prix]', e.target.closest('tr')); if (p != null) { pr.value = fmtNum(p); majTotaux(); } } if (e.target.name === 'statut' && e.target.value === 'reglee' && !form.elements.dateReglement.value) form.elements.dateReglement.value = aujourdhui(); });
+  const erreur = t => { const e = $('#factureErreur'); e.textContent = t; e.hidden = false; e.scrollIntoView({block:'nearest'}); };
+  const sauver = () => {
+    const lignes = lireLignes();
+    if (!lignes.length) { erreur('Ajoute au moins une prestation avec son prix.'); return null; }
+    if (lignes.some(l => !l.designation)) { erreur('Chaque ligne doit avoir une désignation.'); return null; }
+    if (lignes.some(l => l.prix == null)) { erreur('Indique le prix de chaque prestation.'); return null; }
+    lignes.forEach(l => { if (l.quantite == null) l.quantite = 1; });
+    const fd = new FormData(form);
+    const dateEmission = String(fd.get('dateEmission') || '') || aujourdhui();
+    const total = Math.round(lignes.reduce((a, l) => a + l.quantite * l.prix, 0) * 100) / 100;
+    const maintenant = new Date().toISOString();
+    const donnees = { clientId:c.id, dateEmission, datePrestation:String(fd.get('datePrestation') || ''), lignes, total,
+      statut:String(fd.get('statut') || 'a-regler'), moyen:String(fd.get('moyen') || ''), dateReglement:String(fd.get('dateReglement') || ''), note:String(fd.get('note') || '').trim(),
+      emetteur:clone(etat.reglages.emetteur), client:{nom:nomComplet(c), adresse:adresseClient(c)}, majLe:maintenant };
+    let rec = f;
+    if (rec) Object.assign(rec, donnees);
+    else { const an = Number(dateEmission.slice(0, 4)); const rang = prochainRang(an); rec = {id:uid(), annee:an, rang, numero:numeroDe(an, rang), seanceId:seanceId || null, envois:[], creeLe:maintenant, ...donnees}; etat.factures.push(rec); }
+    if (rec.seanceId) { const se = etat.seances.find(x => x.id === rec.seanceId); if (se) { se.regle = rec.statut === 'reglee'; if (rec.moyen) se.moyen = rec.moyen; if (rec.lignes.length === 1) se.tarif = rec.lignes[0].prix; se.majLe = maintenant; } }
+    enregistrer();
+    return rec;
+  };
+  ouvrirDialogue({
+    sale:false,
+    submit: () => { const rec = sauver(); if (!rec) return; fermerDialogue(); render(); if (!f) { ouvrirFacture(c, rec.id); toast(`Facture n° ${rec.numero} créée`); } else toast('Facture enregistrée'); },
+    clic: async b => {
+      const a = b.dataset.dlg;
+      if (a === 'ligne-ajouter') { tbody.insertAdjacentHTML('beforeend', ligneHTML({designation:'', quantite:1, prix:null})); $('tr:last-child [name=designation]', tbody).focus(); majTotaux(); }
+      else if (a === 'ligne-retirer') { b.closest('tr').remove(); majTotaux(); }
+      else if (a === 'reglages') { if (dlg.dataset.sale !== '1' || confirm('Fermer cette facture sans enregistrer pour ouvrir les réglages ?')) { fermerDialogue(); ouvrirReglages(); } }
+      else if (a === 'supprimer') { if (confirm(`Supprimer la facture n° ${f.numero} ? Seule la dernière facture émise peut être supprimée, pour garder une numérotation continue.`)) { oublier('factures', f.id); enregistrer(); fermerDialogue(); render(); toast('Facture supprimée'); } }
+      else if (['envoi-mail','envoi-sms','partager','pdf','voir'].includes(a)) {
+        const rec = dlg.dataset.sale === '1' ? sauver() : f; if (!rec) return; dlg.dataset.sale = '0';
+        await envoyerFacture(a, c, rec);
+        majEnvoiAffiche(c, rec);
+      }
+    }
+  });
+}
+function htmlEnvoi(c, f){
+  const partage = partagePossible();
+  const dernier = f.envois && f.envois.length ? f.envois[f.envois.length - 1] : null;
+  const canal = {mail:'par e-mail', sms:'par SMS', partage:'en partage'};
+  return `<section class="envoi" id="zoneEnvoi" aria-label="Envoyer la facture">
+    <div class="titre-ligne" style="margin-bottom:10px"><strong>Envoyer la facture</strong>${dernier ? `<span class="sous">Dernier envoi ${canal[dernier.canal] || ''} le ${fmtDate(dernier.le.slice(0, 10))}</span>` : ''}</div>
+    <div class="actions">
+      <button type="button" class="btn btn-plein" data-dlg="envoi-mail"${c.email ? '' : ' disabled'}>Envoyer par e-mail</button>
+      <button type="button" class="btn" data-dlg="envoi-sms"${c.tel ? '' : ' disabled'}>Envoyer par SMS</button>
+      ${partage ? '<button type="button" class="btn" data-dlg="partager">Partager le PDF</button>' : ''}
+      <button type="button" class="btn" data-dlg="voir">Voir le PDF</button>
+      <button type="button" class="btn" data-dlg="pdf">Télécharger le PDF</button>
+    </div>
+    <p class="aide">E-mail : le PDF se télécharge et ta messagerie s'ouvre avec le message prêt, il te reste à joindre le PDF puis à envoyer. SMS : le message part avec le numéro et le montant de la facture, un SMS ne pouvant pas contenir de PDF.${partage ? ' Partager : envoie directement le PDF par l\'application de ton choix (e-mail, SMS, messagerie).' : ''}${!c.email ? ' Ajoute l\'e-mail dans l\'identité pour l\'envoi par e-mail.' : ''}${!c.tel ? ' Ajoute le téléphone dans l\'identité pour l\'envoi par SMS.' : ''}</p>
+  </section>`;
+}
+function majEnvoiAffiche(c, f){ const z = $('#zoneEnvoi'); if (z) z.outerHTML = htmlEnvoi(c, f); }
+function signatureMessages(){ return etat.reglages.signature || etat.reglages.emetteur.nom || ''; }
+function texteSMS(c, f){
+  const sig = signatureMessages();
+  return `Bonjour${c.prenom ? ' ' + c.prenom : ''}, voici le récapitulatif de votre facture n° ${f.numero} pour la séance du ${fmtCourt(f.datePrestation || f.dateEmission)} : ${eur(f.total)}${f.statut === 'reglee' ? ', réglée, merci' : ''}. ${c.email ? 'Je vous envoie la facture en PDF par e-mail.' : 'Je peux vous envoyer la facture en PDF sur demande.'}${sig ? ' ' + sig : ''}`;
+}
+function texteMail(c, f){
+  const e = etat.reglages.emetteur, sig = signatureMessages();
+  const reglement = f.statut === 'reglee' ? `réglée${f.moyen ? ' par ' + f.moyen.toLowerCase() : ''}, merci` : 'à régler';
+  return { sujet:`Facture n° ${f.numero}${e.commercial ? ' - ' + e.commercial : ''}`,
+    corps:`Bonjour${c.prenom ? ' ' + c.prenom : ''},\n\nVeuillez trouver ci-joint la facture n° ${f.numero} du ${fmtDate(f.dateEmission)} pour votre séance du ${fmtDate(f.datePrestation || f.dateEmission)}.\n\nMontant : ${eur(f.total)} (${reglement}).\n\nMerci pour votre confiance et à bientôt,\n${sig}` };
+}
+function nomFichierFacture(f){ return `Facture-${f.numero}${f.client && f.client.nom ? '-' + normal(f.client.nom).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : ''}.pdf`; }
+async function envoyerFacture(action, c, f){
+  const blob = pdfFacture(f);
+  const nom = nomFichierFacture(f);
+  const noter = canal => { const t = new Date().toISOString(); f.envois = f.envois || []; f.envois.push({canal, le:t}); f.majLe = t; enregistrer(); };
+  // Un PDF sorti de l'appli compte comme une facture transmise : son numéro ne sera jamais changé par une synchro
+  if (!f.pdfLe) { f.pdfLe = new Date().toISOString(); f.majLe = f.pdfLe; enregistrer(); }
+  if (action === 'pdf') { telecharger(blob, nom); toast('PDF téléchargé'); return; }
+  if (action === 'voir') { const u = URL.createObjectURL(blob); const w = window.open(u, '_blank'); if (!w) telecharger(blob, nom); setTimeout(() => URL.revokeObjectURL(u), 60000); return; }
+  if (action === 'partager') {
+    const fichier = new File([blob], nom, {type:'application/pdf'});
+    try { await navigator.share({files:[fichier], title:`Facture n° ${f.numero}`, text:texteSMS(c, f)}); noter('partage'); toast('Facture partagée'); }
+    catch (e) { if (e && e.name !== 'AbortError') toast('Le partage a échoué : télécharge le PDF à la place.'); }
+    return;
+  }
+  if (action === 'envoi-mail') { telecharger(blob, nom); const m = texteMail(c, f); setTimeout(() => { location.href = mailLien(c.email, m.sujet, m.corps); }, 400); noter('mail'); toast(`PDF téléchargé (${nom}) : joins-le au message avant d'envoyer.`, 7000); return; }
+  if (action === 'envoi-sms') { location.href = smsLien(c.tel, texteSMS(c, f)); noter('sms'); toast('Message préparé dans ton application SMS'); }
+}
+function telecharger(blob, nom){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nom; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+
+/* Générateur PDF minimal (Helvetica, encodage WinAnsi) */
+const HR = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const HB = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+const SPECIAUX = {'€':556,' ':278,' ':278,'œ':944,'Œ':1000,'’':222,'«':556,'»':556,'…':1000,'–':556,'—':1000,'°':400};
+const WIN = {0x20AC:0x80,0x201A:0x82,0x201E:0x84,0x2026:0x85,0x2030:0x89,0x0160:0x8A,0x2039:0x8B,0x0152:0x8C,0x2018:0x91,0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,0x2122:0x99,0x0161:0x9A,0x203A:0x9B,0x0153:0x9C,0x0178:0x9F};
+function largeurTexte(s, taille, gras){ const t = gras ? HB : HR; let w = 0; for (const ch of String(s)) { if (SPECIAUX[ch]) { w += SPECIAUX[ch]; continue; } const b = ch.normalize('NFD')[0].charCodeAt(0); w += b >= 32 && b < 127 ? t[b - 32] : 556; } return w * taille / 1000; }
+function encPDF(s){ let o = ''; for (const ch of String(s)) { let c = ch.codePointAt(0); if (c === 0x202F || c === 0x2009) c = 0xA0; if (!((c >= 0x20 && c < 0x7F) || (c >= 0xA0 && c <= 0xFF))) c = WIN[c] || 0x3F; let x = String.fromCharCode(c); if (x === '\\' || x === '(' || x === ')') x = '\\' + x; o += x; } return o; }
+function couperTexte(s, maxW, taille, gras){ const mots = String(s || '').split(/\s+/).filter(Boolean); const lignes = []; let l = ''; for (const m of mots) { const essai = l ? l + ' ' + m : m; if (largeurTexte(essai, taille, gras) > maxW && l) { lignes.push(l); l = m; } else l = essai; } if (l) lignes.push(l); return lignes.length ? lignes : ['']; }
+class PagePDF {
+  constructor(){ this.o = []; }
+  texte(x, y, s, {taille = 10, gras = false, couleur = '0.11 0.16 0.17', align = 'left'} = {}){ if (s == null || s === '') return; const w = largeurTexte(s, taille, gras); const xx = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x; this.o.push(`BT /${gras ? 'F2' : 'F1'} ${taille} Tf ${couleur} rg ${xx.toFixed(2)} ${y.toFixed(2)} Td (${encPDF(s)}) Tj ET`); }
+  ligne(x1, y1, x2, y2, ep = 0.6, couleur = '0.78 0.83 0.82'){ this.o.push(`${couleur} RG ${ep} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`); }
+  rect(x, y, w, h, couleur){ this.o.push(`${couleur} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); }
+  pdf(titre){
+    const flux = this.o.join('\n');
+    const d = new Date(); const dt = `D:${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
+      `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`, `<< /Title (${encPDF(titre)}) /Producer (Carnet de drainage) /CreationDate (${dt}) >>`];
+    let out = '%PDF-1.4\n%âãÏÓ\n'; const pos = [];
+    objs.forEach((x, i) => { pos.push(out.length); out += `${i + 1} 0 obj\n${x}\nendobj\n`; });
+    const xref = out.length;
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + pos.map(p => String(p).padStart(10, '0') + ' 00000 n \n').join('');
+    out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${objs.length} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    const octets = new Uint8Array(out.length); for (let i = 0; i < out.length; i++) octets[i] = out.charCodeAt(i) & 0xFF;
+    return new Blob([octets], {type:'application/pdf'});
+  }
+}
+function pdfFacture(f){
+  const p = new PagePDF(), e = f.emetteur || {}, cl = f.client || {nom:'', adresse:[]};
+  const M = 56, W = 595.28, H = 841.89, gris = '0.36 0.43 0.44', lagon = '0.17 0.42 0.44';
+  let y = H - 66;
+  p.texte(M, y, `${e.nom || 'Nom du praticien'} EI`, {taille:13, gras:true}); y -= 17;
+  [e.commercial, ...String(e.adresse || '').split(/\r?\n/), e.tel ? `Tél. ${e.tel}` : '', e.email, e.siret ? `SIRET ${e.siret}` : ''].filter(x => x && x.trim()).forEach(l => { p.texte(M, y, l.trim(), {taille:9.5, couleur:gris}); y -= 13; });
+  p.texte(W - M, H - 72, 'Facture', {taille:26, gras:true, align:'right', couleur:lagon});
+  p.texte(W - M, H - 92, `N° ${f.numero}`, {taille:11, gras:true, align:'right'});
+  p.texte(W - M, H - 107, `Date : ${fmtDate(f.dateEmission)}`, {taille:10, align:'right', couleur:gris});
+  let yc = Math.min(y, H - 140) - 18;
+  const xc = W - M - 210;
+  p.texte(xc, yc, 'Facturé à', {taille:9, couleur:gris}); yc -= 15;
+  p.texte(xc, yc, cl.nom, {taille:11, gras:true}); yc -= 14;
+  (cl.adresse || []).forEach(l => { couperTexte(l, 210, 10).forEach(t => { p.texte(xc, yc, t, {taille:10}); yc -= 13; }); });
+  y = Math.min(y, yc) - 34;
+  const cQ = W - M - 196, cPU = W - M - 96, cT = W - M - 8;
+  p.rect(M, y - 7, W - 2 * M, 22, '0.92 0.95 0.945');
+  p.texte(M + 8, y, 'Désignation', {taille:9.5, gras:true});
+  p.texte(cQ, y, 'Qté', {taille:9.5, gras:true, align:'right'});
+  p.texte(cPU, y, 'Prix unitaire', {taille:9.5, gras:true, align:'right'});
+  p.texte(cT, y, 'Total', {taille:9.5, gras:true, align:'right'});
+  y -= 27;
+  for (const l of f.lignes) {
+    const ls = couperTexte(l.designation, cQ - 50 - (M + 8), 10);
+    ls.forEach((t, i) => p.texte(M + 8, y - i * 13, t, {taille:10}));
+    p.texte(cQ, y, fmtNum(l.quantite), {taille:10, align:'right'});
+    p.texte(cPU, y, eur(l.prix), {taille:10, align:'right'});
+    p.texte(cT, y, eur(l.quantite * l.prix), {taille:10, align:'right'});
+    y -= (ls.length - 1) * 13 + 12;
+    p.ligne(M, y, W - M, y);
+    y -= 15;
+  }
+  y -= 6;
+  p.texte(cPU, y, 'Total à payer', {taille:11, gras:true, align:'right'});
+  p.texte(cT, y, eur(f.total), {taille:12.5, gras:true, align:'right'});
+  y -= 16;
+  p.texte(cT, y, e.tva || '', {taille:9, align:'right', couleur:gris});
+  y -= 40;
+  const infos = [ f.datePrestation ? `Date de la prestation : ${fmtDate(f.datePrestation)}` : '',
+    f.statut === 'reglee' ? `Facture réglée${f.dateReglement ? ' le ' + fmtDate(f.dateReglement) : ''}${f.moyen ? ' par ' + f.moyen.toLowerCase() : ''}.` : 'Facture à régler à réception.',
+    f.note, e.assurance ? `Assurance professionnelle : ${e.assurance}` : '' ].filter(Boolean);
+  infos.forEach(t => couperTexte(t, W - 2 * M, 10).forEach(l => { p.texte(M, y, l, {taille:10}); y -= 14; }));
+  p.ligne(M, 54, W - M, 54);
+  p.texte(W / 2, 40, [`${e.nom || ''} EI`.trim(), e.siret ? `SIRET ${e.siret}` : '', e.tva].filter(Boolean).join('  -  '), {taille:8, align:'center', couleur:gris});
+  return p.pdf(`Facture ${f.numero}`);
+}
+
+/* ---------- Réglages ---------- */
+function ouvrirReglages(){
+  const r = etat.reglages, e = r.emetteur;
+  const dlg = $('#dlg'); dlg.className = '';
+  const ligneTarif = t => `<tr><td><input type="text" name="tDesignation" value="${esc(t.designation || '')}" aria-label="Prestation"></td><td class="num-col"><input type="text" inputmode="decimal" name="tPrix" value="${esc(fmtNum(t.prix))}" aria-label="Prix en euros"></td><td class="act-col"><button type="button" class="btn petit danger" data-dlg="tarif-retirer">Retirer</button></td></tr>`;
+  const ch = (k, l, val, extra = '') => `<div class="champ${extra}"><label for="r-${k}">${l}</label><input type="text" id="r-${k}" name="${k}" value="${esc(val || '')}"></div>`;
+  dlg.innerHTML = `<form id="formReglages" novalidate autocomplete="off">
+  <header class="dlg-tete"><h2 id="dlgTitre">Réglages</h2></header>
+  <div class="dlg-corps">
+    <fieldset><legend>Informations de facturation</legend>
+      <p class="aide">Elles figurent sur chaque facture et en tête des documents imprimés. La mention « EI » est ajoutée automatiquement après ton nom.</p>
+      <div class="grille">
+        ${ch('nom', 'Prénom et nom', e.nom)}${ch('commercial', 'Nom commercial (facultatif)', e.commercial)}
+        <div class="champ large"><label for="r-adresse">Adresse</label><textarea id="r-adresse" name="adresse" rows="2">${esc(e.adresse)}</textarea></div>
+        ${ch('siret', 'Numéro SIRET', e.siret)}${ch('tel', 'Téléphone', e.tel)}${ch('email', 'E-mail', e.email)}${ch('assurance', 'Assurance professionnelle (facultatif)', e.assurance)}
+        ${ch('tva', 'Mention de TVA', e.tva, ' large')}
+      </div>
+      <p class="aide" style="margin-top:8px">La mention de TVA correspond à la franchise en base des micro-entrepreneurs. Si le texte de référence change, modifie-la ici : les prochaines factures l'utiliseront.</p>
+    </fieldset>
+    <fieldset><legend>Tarifs</legend>
+      <p class="aide">Proposés automatiquement sur les séances et les factures. Tu peux toujours modifier le prix au cas par cas.</p>
+      <table class="lignes"><thead><tr><th>Prestation</th><th class="num-col">Prix (€)</th><th class="act-col"></th></tr></thead><tbody id="tarifsLignes">${r.tarifs.map(ligneTarif).join('')}</tbody></table>
+      <button type="button" class="btn petit" data-dlg="tarif-ajouter" style="margin-top:8px">Ajouter un tarif</button>
+    </fieldset>
+    <fieldset><legend>Messages</legend>
+      <div class="champ" style="max-width:360px"><label for="r-signature">Signature des e-mails et SMS</label><input type="text" id="r-signature" name="signature" value="${esc(r.signature || '')}" placeholder="Par défaut, ton prénom et ton nom"></div>
+    </fieldset>
+  </div>
+  <footer class="dlg-pied"><span class="espace"></span><button type="button" class="btn" data-dlg="fermer">Annuler</button><button type="submit" class="btn btn-plein">Enregistrer les réglages</button></footer></form>`;
+  const form = $('#formReglages');
+  ouvrirDialogue({
+    sale:false,
+    submit: () => {
+      const fd = new FormData(form);
+      for (const k of ['nom','commercial','adresse','siret','tel','email','assurance','tva']) e[k] = String(fd.get(k) || '').trim();
+      if (!e.tva) e.tva = TVA_DEFAUT;
+      r.signature = String(fd.get('signature') || '').trim();
+      r.majLe = new Date().toISOString();
+      r.tarifs = $$('#tarifsLignes tr').map(tr => ({id:uid(), designation:$('[name=tDesignation]', tr).value.trim(), prix:num($('[name=tPrix]', tr).value)})).filter(t => t.designation);
+      enregistrer(); fermerDialogue(); render(); toast('Réglages enregistrés');
+    },
+    clic: b => {
+      if (b.dataset.dlg === 'tarif-ajouter') { $('#tarifsLignes').insertAdjacentHTML('beforeend', ligneTarif({designation:'', prix:null})); $('#tarifsLignes tr:last-child input').focus(); }
+      else if (b.dataset.dlg === 'tarif-retirer') b.closest('tr').remove();
+    }
+  });
+}
+
+/* ---------- Nouvelle fiche ---------- */
+function ouvrirNouveauClient(){
+  const dlg = $('#dlg'); dlg.className = 'etroit';
+  dlg.innerHTML = `<form id="formNouveau" novalidate autocomplete="off">
+  <header class="dlg-tete"><h2 id="dlgTitre">Nouvelle fiche</h2></header>
+  <div class="dlg-corps"><div class="grille">
+    <div class="champ"><label for="n-prenom">Prénom</label><input type="text" id="n-prenom" name="prenom"></div>
+    <div class="champ"><label for="n-nom">Nom</label><input type="text" id="n-nom" name="nom"></div>
+    <div class="champ large"><label for="n-tel">Téléphone</label><input type="tel" id="n-tel" name="tel" inputmode="tel"></div>
+  </div><p class="aide" style="margin-top:12px">Tu compléteras le reste dans la fiche.</p><p class="erreur-form" id="nouveauErreur" hidden></p></div>
+  <footer class="dlg-pied"><span class="espace"></span><button type="button" class="btn" data-dlg="fermer">Annuler</button><button type="submit" class="btn btn-plein">Créer la fiche</button></footer></form>`;
+  const form = $('#formNouveau');
+  ouvrirDialogue({ sale:false, submit: () => {
+    const fd = new FormData(form); const prenom = String(fd.get('prenom') || '').trim(), nom = String(fd.get('nom') || '').trim();
+    if (!prenom && !nom) { const e = $('#nouveauErreur'); e.textContent = 'Indique au moins un prénom ou un nom.'; e.hidden = false; form.elements.prenom.focus(); return; }
+    const maintenant = new Date().toISOString();
+    const c = {id:uid(), prenom, nom, tel:String(fd.get('tel') || '').trim(), creeLe:maintenant, majLe:maintenant};
+    etat.clients.push(c); enregistrer(); fermerDialogue(); aller(c.id, 'identite'); toast('Fiche créée');
+  }});
+  setTimeout(() => form.elements.prenom.focus(), 30);
+}
+
+/* ---------- Fenêtre de dialogue commune ---------- */
+let ctxDlg = null;
+function finirCtx(){ const f = ctxDlg && ctxDlg.surFermeture; ctxDlg = null; if (f) { try { f(); } catch (e) {} } relireSiBesoin(); }
+function ouvrirDialogue(ctx){ if (ctxDlg && ctxDlg !== ctx) finirCtx(); ctxDlg = ctx; const d = $('#dlg'); d.dataset.sale = '0'; if (!d.open) d.showModal(); d.scrollTop = 0; }
+function fermerDialogue(){ const d = $('#dlg'); finirCtx(); d.dataset.sale = '0'; if (d.open) d.close(); d.innerHTML = ''; }
+(function(){
+  const d = $('#dlg');
+  d.addEventListener('input', () => { d.dataset.sale = '1'; });
+  d.addEventListener('submit', e => { e.preventDefault(); if (ctxDlg && ctxDlg.submit) ctxDlg.submit(); });
+  d.addEventListener('click', e => { const b = e.target.closest('[data-dlg]'); if (!b || !d.contains(b)) return; if (b.dataset.dlg === 'fermer') { if (d.dataset.sale !== '1' || confirm('Fermer sans enregistrer les modifications ?')) fermerDialogue(); return; } if (ctxDlg && ctxDlg.clic) ctxDlg.clic(b); });
+  d.addEventListener('cancel', e => {
+    if (ctxDlg && ctxDlg.bloquer && ctxDlg.bloquer()) { e.preventDefault(); return; }
+    if (d.dataset.sale === '1' && !confirm('Fermer sans enregistrer les modifications ?')) e.preventDefault();
+    else { finirCtx(); setTimeout(() => { if (!d.open) d.innerHTML = ''; }, 0); }
+  });
+})();
+
+/* ---------- Impression ---------- */
+function enteteImpression(droite){ const e = etat.reglages.emetteur; return `<div class="imp-entete"><span>${esc([e.nom, e.commercial].filter(Boolean).join(', '))}${e.tel ? ' ' + esc(e.tel) : ''}</span><span>${esc(droite)}</span></div>`; }
+function impQuestion(qd, r){
+  const box = b => b ? '☒' : '☐';
+  const v = x => esc(x || '');
+  if (qd.type === 'cases') return `<div class="imp-q"><p>${esc(qd.label)}</p><div class="imp-cases">${qd.options.map(op => `<div>${box(r && (r.value || []).includes(op.v))} ${esc(op.v)}</div>`).join('')}</div>${qd.autre ? `<div class="imp-ligne"><span>${esc(qd.autre)} :</span><span class="val">${v(r && r.autreValeur)}</span></div>` : ''}</div>`;
+  const lignesPrecisions = () => (qd.precisions || []).map(p => `<div class="imp-ligne"><span>${esc(p.label)} :</span><span class="val">${v(r && r.reponsesPrecisions && r.reponsesPrecisions[p.id])}</span></div>`).join('');
+  if (qd.type === 'choix') return `<div class="imp-q"><p>${esc(qd.label)}</p><div class="imp-cases${qd.options.length === 3 ? ' trois' : ''}">${qd.options.map(op => `<div>${box(r && r.value === op.v)} ${esc(op.v)}</div>`).join('')}</div>${lignesPrecisions()}</div>`;
+  if (qd.type === 'ouinon' && qd.compact) {
+    const p = r && r.value === 'oui' && r.reponsesPrecisions ? Object.values(r.reponsesPrecisions).filter(Boolean).join(', ') : '';
+    return `<div class="imp-on"><span class="boites">${box(r && r.value === 'oui')} Oui ${box(r && r.value === 'non')} Non</span><span>${esc(qd.label)}${p ? ` : <em>${esc(p)}</em>` : ''}</span></div>`;
+  }
+  if (qd.type === 'texteLong') return `<div class="imp-q"><p>${esc(qd.label)} :</p>${r && r.value ? `<p class="imp-texte">${esc(r.value)}</p>` : '<div class="imp-lignes"><span></span><span></span><span></span></div>'}</div>`;
+  if (qd.type === 'ouinon') return `<div class="imp-q"><p>${esc(qd.label)}</p><div class="imp-cases"><div>${box(r && r.value === 'oui')} Oui</div><div>${box(r && r.value === 'non')} Non</div></div>${(qd.precisions || []).map(p => `<div class="imp-ligne"><span>${esc(p.label)} :</span><span class="val">${v(r && r.reponsesPrecisions && r.reponsesPrecisions[p.id])}</span></div>`).join('')}</div>`;
+  if (qd.type === 'texte') return `<div class="imp-q"><div class="imp-ligne"><span>${esc(qd.label)} :</span><span class="val">${v(r && r.value)}</span></div></div>`;
+  if (qd.type === 'engagements') return `<div class="imp-q">${qd.options.map(op => `<p>${box(r && (r.value || []).includes(op.v))} ${esc(op.v)}</p>`).join('')}<div class="imp-signature"><span>Date :</span><span class="val"></span><span>Signature :</span><span class="val"></span></div></div>`;
+  if (qd.type === 'accord') return `<div class="imp-q"><p>${box(r && r.value)} ${esc(qd.label)}</p><div class="imp-signature"><span>Date :</span><span class="val"></span><span>Signature :</span><span class="val"></span></div></div>`;
+  return '';
+}
+function htmlImpQuestionnaire(c, q){
+  const M = modeleDe(q);
+  const sections = structureDe(q);
+  const R = Object.fromEntries((q && q.reponses || []).map(r => [r.id, r]));
+  const ent = enteteImpression(M.enTete);
+  let n = 0;
+  const champs = (M.identite || ANCIEN.identite).map(([l, f]) => [l, c ? f(c) : '']).concat([[M.libelleDate || 'Date', q && fmtCourt(q.date)]]);
+  const rgpd = `<div class="imp-cadre"><p><strong>Conservation des données</strong></p><p>${c && c.consentRgpd ? '☒' : '☐'} ${esc(TEXTE_RGPD)}</p></div>`;
+  let h = `<section class="imp-page">${ent}<h1>${esc(M.titre)}</h1>${M.sousTitre ? `<p class="imp-sous">${esc(M.sousTitre)}</p>` : ''}
+    ${M.info ? `<div class="imp-cadre" style="margin:8px 0 4px"><p><strong>${esc(M.info.titre)}</strong></p><p>${esc(M.info.texte)}</p></div>` : M.intro ? `<p>${esc(M.intro)}</p>` : ''}
+    <h2>Informations générales</h2><div class="imp-champs">${champs.map(([l, x]) => `<div class="imp-champ"><span>${l} :</span><span class="val">${esc(x || '')}</span></div>`).join('')}</div>`;
+  for (const s of sections) {
+    if (s.annexe) continue; n++;
+    h += `<h2>${n}. ${esc(s.titre)}</h2>${s.aide ? `<p>${esc(s.aide)}</p>` : ''}` + s.questions.map(qd => impQuestion(qd, R[qd.id])).join('');
+    if (s.alerte) h += `<div class="imp-alerte"><strong>${esc(s.alerte.titre)} :</strong> ${s.alerte.lignes.map(esc).join(' ')}</div>`;
+  }
+  const annexe = sections.find(s => s.annexe);
+  // Modèle sans page annexe (Coralys) : accord de conservation des données et signature en fin de questionnaire
+  if (!annexe) h += `${M.pied ? `<p class="imp-note">${esc(M.pied)}</p>` : ''}${rgpd}<div class="imp-signature"><span>Date :</span><span class="val"></span><span>Signature :</span><span class="val"></span></div>`;
+  h += '</section>';
+  if (annexe) {
+    const a = M.annexe || {intro:'', listes:[], avertissement:''};
+    h += `<section class="imp-page">${ent}<h1>${esc(annexe.titre)}</h1><p>${esc(a.intro)}</p>${a.listes.map(l => `<p><strong>${esc(l.titre)}</strong></p><ul>${l.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}<p>${esc(a.avertissement)}</p>
+      ${annexe.questions.map(qd => impQuestion(qd, R[qd.id])).join('')}
+      ${rgpd}</section>`;
+  }
+  return h;
+}
+function htmlImpFiche(c){
+  const ss = seancesDe(c.id).slice().reverse();
+  const q = dernierQuestionnaire(c.id);
+  const al = alertesQuestionnaire(q);
+  const id = [['Date de naissance', c.naissance ? `${fmtDate(c.naissance)}${age(c.naissance) != null ? ` (${age(c.naissance)} ans)` : ''}` : ''], ['Pronoms', c.pronoms], ['Téléphone', c.tel], ['E-mail', c.email], ['Adresse', adresseClient(c).join(', ')], ['Profession', c.profession], ['Personne à prévenir', [[c.urgenceNom, c.urgenceLien ? `(${c.urgenceLien})` : ''].filter(Boolean).join(' '), c.urgenceTel].filter(Boolean).join(', ')], ['Médecin traitant', c.medecin]].filter(x => x[1]);
+  const mesCles = MESURES.filter(([k]) => ss.some(s => s.mesures && s.mesures.avant && s.mesures.avant[k] != null));
+  return `<section class="imp-page">${enteteImpression('Fiche client')}<h1>${esc(nomComplet(c))}</h1>
+    <table><tbody>${id.map(([l, v]) => `<tr><th style="width:34%">${l}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
+    ${q ? `<p>Questionnaire de santé du ${fmtDate(q.date)}.</p>` : '<p>Pas encore de questionnaire de santé.</p>'}
+    ${al.filter(a => a.niveau === 'rouge').length ? `<div class="imp-alerte"><strong>Séance à reporter si toujours d'actualité :</strong> ${esc(al.filter(a => a.niveau === 'rouge').map(a => a.texte).join(', '))}</div>` : ''}
+    ${al.filter(a => a.niveau === 'orange').length ? `<div class="imp-alerte"><strong>À prendre en compte :</strong> ${esc(al.filter(a => a.niveau === 'orange').map(a => a.texte).join(', '))}</div>` : ''}
+    ${c.precautions ? `<div class="imp-alerte"><strong>Précautions :</strong> ${esc(c.precautions)}</div>` : ''}
+    ${c.notes ? `<h2>Notes</h2><p style="white-space:pre-line">${esc(c.notes)}</p>` : ''}
+    <h2>Séances (${ss.length})</h2>
+    ${ss.length ? `<table><thead><tr><th>Date</th><th>Séance</th><th>Zones</th><th>Observations</th></tr></thead><tbody>${ss.map(s => `<tr><td>${fmtCourt(s.date)}</td><td>${esc(s.type || '')}${s.duree ? `, ${fmtNum(s.duree)} min` : ''}</td><td>${esc(resumeZones(s.zones))}</td><td>${esc([s.controle && s.controle.changement === 'oui' ? 'Changement de santé : ' + (s.controle.note || 'oui') : '', s.observations].filter(Boolean).join('. '))}</td></tr>`).join('')}</tbody></table>` : '<p>Aucune séance.</p>'}
+    ${mesCles.length ? `<h2>Mensurations avant séance (cm)</h2><table><thead><tr><th>Date</th>${mesCles.map(([, l]) => `<th>${esc(l)}</th>`).join('')}</tr></thead><tbody>${ss.filter(s => s.mesures && Object.keys(s.mesures.avant || {}).length).map(s => `<tr><td>${fmtCourt(s.date)}</td>${mesCles.map(([k]) => `<td>${fmtNum(s.mesures.avant[k])}</td>`).join('')}</tr>`).join('')}</tbody></table>` : ''}
+  </section>`;
+}
+function imprimer(html){ const z = $('#impression'); z.innerHTML = html; z.removeAttribute('aria-hidden'); setTimeout(() => window.print(), 60); }
+window.addEventListener('afterprint', () => { const z = $('#impression'); z.innerHTML = ''; z.setAttribute('aria-hidden', 'true'); });
+
+/* ---------- Sauvegarde et restauration ---------- */
+function exporter(){
+  const donnees = JSON.stringify({...etat, exporteLe:new Date().toISOString()}, null, 1);
+  telecharger(new Blob([donnees], {type:'application/json'}), `carnet-drainage-sauvegarde-${aujourdhui()}.json`);
+  etat.reglages.derniereSauvegarde = new Date().toISOString();
+  enregistrer(false); majPied();
+  if (!ui.clientId) renderPrincipal();
+  toast('Sauvegarde téléchargée : range ce fichier dans un endroit sûr, il contient des données de santé.', 6000);
+}
+async function importer(fichier){
+  try {
+    const obj = JSON.parse(await fichier.text());
+    if (!obj || !Array.isArray(obj.clients)) throw new Error('format');
+    const n = obj.clients.length;
+    const msg = etat.clients.length ? `Remplacer les ${etat.clients.length} fiches actuelles par les ${n} fiches de la sauvegarde${obj.exporteLe ? ` du ${fmtDate(obj.exporteLe.slice(0, 10))}` : ''} ? Les données actuelles seront effacées.` : `Restaurer les ${n} fiches de cette sauvegarde ?`;
+    if (!confirm(msg)) return;
+    etat = migrer(normaliser(obj));
+    await ecrireMaintenant();
+    location.hash = '#/'; render();
+    toast(`Sauvegarde restaurée : ${n} fiche${n > 1 ? 's' : ''}`);
+  } catch (e) { alert("Ce fichier n'est pas une sauvegarde du carnet de drainage. Choisis le fichier « carnet-drainage-sauvegarde-… .json »."); }
+}
+
+/* =========================================================
+   Synchronisation directe entre deux appareils
+   ---------------------------------------------------------
+   Un appareil affiche un QR code : adresse de l'appli, identifiant de rendez-vous
+   et clé secrète à usage unique (AES-GCM 128 bits). L'autre le scanne.
+   Le serveur public PeerJS sert seulement à relayer les messages de connexion
+   WebRTC, chiffrés avec la clé, qu'il ne voit jamais. Les fiches passent ensuite
+   directement d'un appareil à l'autre, chiffrées une seconde fois avec la clé.
+   Pas de serveur relais (TURN) : si les appareils ne peuvent pas se joindre
+   directement, la synchro échoue plutôt que de faire transiter les données ailleurs.
+   ========================================================= */
+const SYNC = {
+  serveur:'wss://0.peerjs.com:443/peerjs', cleServeur:'peerjs',
+  ice:[{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun.cloudflare.com:3478'}],
+  protocole:1, morceau:15000
+};
+try { if (window.__configSynchro) Object.assign(SYNC, window.__configSynchro); } catch (e) {}
+const pause = ms => new Promise(r => setTimeout(r, ms));
+function erreurSync(code){ const e = new Error(code); e.code = code; return e; }
+function typeAppareil(){ const ua = navigator.userAgent || ''; if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return 'tablette'; if (/Android|iPhone|iPod|Mobile/i.test(ua)) return 'telephone'; return 'ordinateur'; }
+const NOMS_APPAREILS = {telephone:'ton téléphone', ordinateur:'ton ordinateur', tablette:'ta tablette'};
+const nomAppareil = t => NOMS_APPAREILS[t] || "l'autre appareil";
+function aleatoire(n){ return crypto.getRandomValues(new Uint8Array(n)); }
+function idAleatoire(n){ const a = 'abcdefghijkmnpqrstuvwxyz23456789'; return Array.from(aleatoire(n), b => a[b % 32]).join(''); }
+function versB64u(u8){ let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function depuisB64u(t){ const b = String(t).replace(/-/g, '+').replace(/_/g, '/'); const s = atob(b + '='.repeat((4 - b.length % 4) % 4)); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+function importerCle(brute){ return crypto.subtle.importKey('raw', brute, {name:'AES-GCM'}, false, ['encrypt', 'decrypt']); }
+async function chiffrer(cle, objet){ const iv = aleatoire(12); const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM', iv}, cle, new TextEncoder().encode(JSON.stringify(objet)))); const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12); return versB64u(out); }
+async function dechiffrer(cle, texte){ const u = depuisB64u(texte); const clair = await crypto.subtle.decrypt({name:'AES-GCM', iv:u.subarray(0, 12)}, cle, u.subarray(12)); return JSON.parse(new TextDecoder().decode(clair)); }
+async function empreinte(x){ const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(Fusion.canon(x)))); return Array.from(h, b => b.toString(16).padStart(2, '0')).join(''); }
+function lienSynchro(id, brute){ return `${location.origin}${location.pathname}#synchro=${id}.${versB64u(brute)}`; }
+function lireLienSynchro(texte){ const m = /#synchro=([a-z0-9]{6,40})\.([A-Za-z0-9_-]{20,64})/.exec(String(texte || '')); return m ? {id:m[1], cle:m[2]} : null; }
+function synchroPossible(){
+  if (location.protocol === 'file:' || !window.isSecureContext) return 'hors-https';
+  if (!window.RTCPeerConnection || !window.WebSocket || !(window.crypto && crypto.subtle)) return 'non-pris-en-charge';
+  return null;
+}
+
+// Connexion au serveur de mise en relation (protocole du serveur PeerJS)
+class Signal {
+  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; }
+  ouvrir(){
+    return new Promise((ok, ko) => {
+      let ws;
+      try { ws = new WebSocket(`${SYNC.serveur}?key=${encodeURIComponent(SYNC.cleServeur)}&id=${this.id}&token=${idAleatoire(12)}&version=1.5.4`); }
+      catch (e) { ko(erreurSync('reseau')); return; }
+      this.ws = ws;
+      const delai = setTimeout(() => { ko(erreurSync('reseau')); this.fermer(); }, 12000);
+      ws.onmessage = ev => {
+        let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+        if (m.type === 'OPEN') { clearTimeout(delai); this.ouvert = true; this.battement = setInterval(() => this.envoyer({type:'HEARTBEAT'}), 5000); ok(); return; }
+        if (m.type === 'ID-TAKEN' || m.type === 'ERROR') { clearTimeout(delai); ko(erreurSync(m.type === 'ID-TAKEN' ? 'id-pris' : 'reseau')); this.fermer(); return; }
+        if (m.type !== 'HEARTBEAT') this.surMessage(m);
+      };
+      ws.onerror = () => {};
+      ws.onclose = () => { clearTimeout(delai); clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) ko(erreurSync('reseau')); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+    });
+  }
+  envoyer(m){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); } catch (e) {} }
+  fermer(){ this.ferme = true; clearInterval(this.battement); try { if (this.ws) this.ws.close(); } catch (e) {} }
+}
+
+// Une synchronisation : « hote » affiche le QR code, « invite » le scanne
+function creerSession(role, rappels){
+  const s = {role, fermee:false, applique:false, application:false};
+  let signal = null, pc = null, canal = null, cle = null, distant = null, nomDistant = '';
+  let candidatsRecus = [], descriptionDistante = false, offreEnvoyee = false, candidatsSortants = [];
+  let fileSignal = Promise.resolve(), fileEnvoiSignal = Promise.resolve(), fileCanal = Promise.resolve();
+  const morceaux = new Map();
+  let finLocale = null, finDistante = null, bilan = null, minuterie = null, termine = false;
+
+  const echec = e => {
+    if (s.fermee) return;
+    const code = (e && e.code) || 'coupure';
+    s.fermer();
+    rappels.erreur(code === 'coupure' && s.applique ? 'coupure-apres' : code);
+  };
+  s.fermer = () => {
+    s.fermee = true; clearTimeout(minuterie);
+    try { if (canal) canal.close(); } catch (e) {}
+    try { if (pc) pc.close(); } catch (e) {}
+    if (signal) signal.fermer();
+  };
+  const armerDelai = ms => { clearTimeout(minuterie); minuterie = setTimeout(() => echec(erreurSync(canal && canal.readyState === 'open' ? 'coupure' : 'injoignable')), ms); };
+  const recevoirSignal = m => { fileSignal = fileSignal.then(() => surSignal(m)).catch(echec); };
+  const descr = d => ({type:d.type, sdp:d.sdp});
+
+  function envoyerSignal(type, contenu){
+    fileEnvoiSignal = fileEnvoiSignal.then(async () => {
+      if (!signal || !distant || s.fermee) return;
+      signal.envoyer({type, dst:distant, payload:{d:await chiffrer(cle, {...contenu, de:role})}});
+    }).catch(() => {});
+    return fileEnvoiSignal;
+  }
+  function nouvellePC(){
+    pc = new RTCPeerConnection({iceServers:SYNC.ice});
+    pc.onicecandidate = e => {
+      if (!e.candidate) return;
+      const c = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
+      if (role === 'invite' && !offreEnvoyee) candidatsSortants.push(c); else envoyerSignal('CANDIDATE', {candidat:c});
+    };
+    const surEtat = () => { if (pc && (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed')) echec(erreurSync('injoignable')); };
+    pc.onconnectionstatechange = surEtat; pc.oniceconnectionstatechange = surEtat;
+  }
+  async function viderCandidats(){ descriptionDistante = true; const l = candidatsRecus; candidatsRecus = []; for (const c of l) { try { await pc.addIceCandidate(c); } catch (e) {} } }
+
+  async function surSignal(m){
+    if (s.fermee) return;
+    if (m.type === 'EXPIRE') { if (role === 'invite' && m.src === distant) throw erreurSync('qr-inactif'); return; }
+    if (m.type === 'ANSWER' && role === 'invite' && m.src === distant && m.payload && m.payload.refus) throw erreurSync('cle');
+    if (!m.payload || typeof m.payload.d !== 'string') return;
+    let contenu;
+    try { contenu = await dechiffrer(cle, m.payload.d); }
+    catch (e) {
+      // Message chiffré avec une autre clé : on le signale à l'expéditeur sans rien lui révéler
+      if (m.type === 'OFFER' && role === 'hote' && !pc && signal) signal.envoyer({type:'ANSWER', dst:m.src, payload:{refus:true}});
+      return;
+    }
+    if (!contenu || contenu.de === role) return;
+    if (m.type === 'OFFER' && role === 'hote') {
+      if (pc) return; // une seule synchro à la fois
+      distant = m.src;
+      rappels.etape('connexion');
+      nouvellePC();
+      pc.ondatachannel = e => brancherCanal(e.channel);
+      await pc.setRemoteDescription(contenu.sdp);
+      await viderCandidats();
+      await pc.setLocalDescription(await pc.createAnswer());
+      await envoyerSignal('ANSWER', {sdp:descr(pc.localDescription)});
+      armerDelai(30000);
+    } else if (m.type === 'ANSWER' && role === 'invite' && m.src === distant && !descriptionDistante) {
+      await pc.setRemoteDescription(contenu.sdp);
+      await viderCandidats();
+    } else if (m.type === 'CANDIDATE' && pc && m.src === distant && contenu.candidat) {
+      if (!descriptionDistante) candidatsRecus.push(contenu.candidat);
+      else { try { await pc.addIceCandidate(contenu.candidat); } catch (e) {} }
+    }
+  }
+
+  function brancherCanal(c){
+    canal = c;
+    canal.onopen = () => {
+      if (s.fermee) return;
+      if (signal) { signal.fermer(); signal = null; } // le QR code ne sert plus : il devient inutilisable
+      rappels.etape('echange', '');
+      armerDelai(60000);
+      if (role === 'invite') envoyer({type:'bonjour', proto:SYNC.protocole, appareil:typeAppareil()}).catch(echec);
+    };
+    canal.onmessage = e => { fileCanal = fileCanal.then(() => recevoir(e.data)).catch(echec); };
+    canal.onclose = () => { if (!termine) echec(erreurSync('coupure')); };
+    canal.onerror = () => {};
+  }
+  async function envoyer(objet){
+    const texte = await chiffrer(cle, {...objet, de:role});
+    const n = Math.max(1, Math.ceil(texte.length / SYNC.morceau)), k = idAleatoire(8);
+    for (let i = 0; i < n; i++) {
+      while (canal.bufferedAmount > (1 << 20)) { if (s.fermee) return; await pause(25); }
+      const d = texte.slice(i * SYNC.morceau, (i + 1) * SYNC.morceau);
+      canal.send(JSON.stringify(n === 1 ? {t:'m', d} : {t:'c', k, i, n, d}));
+    }
+  }
+  async function recevoir(brut){
+    if (s.fermee || termine) return;
+    let m; try { m = JSON.parse(brut); } catch (e) { return; }
+    let texte;
+    if (m.t === 'm') texte = m.d;
+    else if (m.t === 'c' && Number.isInteger(m.i) && Number.isInteger(m.n) && m.n > 0 && m.n < 100000) {
+      let e = morceaux.get(m.k);
+      if (!e) { e = {n:m.n, parts:new Array(m.n), recus:0}; morceaux.set(m.k, e); }
+      if (m.i >= 0 && m.i < e.n && e.parts[m.i] == null) { e.parts[m.i] = m.d; e.recus++; }
+      if (e.recus < e.n) return;
+      morceaux.delete(m.k); texte = e.parts.join('');
+    } else return;
+    let msg;
+    try { msg = await dechiffrer(cle, texte); } catch (e) { throw erreurSync('cle'); }
+    if (!msg || msg.de === role) return;
+    armerDelai(60000);
+    if (msg.type === 'bonjour') {
+      if (msg.proto !== SYNC.protocole) { await envoyer({type:'erreur', code:'version'}).catch(() => {}); throw erreurSync('version'); }
+      nomDistant = msg.appareil || '';
+      rappels.etape('echange', nomDistant);
+      if (role === 'hote') await envoyer({type:'bonjour', proto:SYNC.protocole, appareil:typeAppareil()});
+      viderEnAttente();
+      await envoyer({type:'etat', etat:Fusion.partage(etat)});
+    } else if (msg.type === 'etat') {
+      const f = Fusion.fusionner(etat, msg.etat);
+      bilan = f.bilan;
+      s.application = true;
+      await rappels.appliquer(f.resultat, nomDistant);
+      s.applique = true; s.application = false;
+      finLocale = await empreinte(f.resultat);
+      await envoyer({type:'fin', empreinte:finLocale});
+      verifier();
+    } else if (msg.type === 'fin') { finDistante = msg.empreinte; verifier(); }
+    else if (msg.type === 'erreur') throw erreurSync(msg.code === 'version' ? 'version' : 'coupure');
+  }
+  function verifier(){
+    if (!finLocale || !finDistante || termine) return;
+    termine = true; clearTimeout(minuterie);
+    setTimeout(() => s.fermer(), 1500);
+    if (finLocale === finDistante) rappels.fini(bilan, nomDistant); else rappels.erreur('divergence');
+  }
+
+  s.preparerHote = async () => {
+    const brute = aleatoire(16);
+    cle = await importerCle(brute);
+    for (let essai = 0; essai < 3; essai++) {
+      const id = 'cd' + idAleatoire(14);
+      signal = new Signal(id, recevoirSignal);
+      try { await signal.ouvrir(); }
+      catch (e) { signal = null; if (e.code === 'id-pris') continue; throw e; }
+      if (s.fermee) { signal.fermer(); return null; }
+      signal.surCoupure = () => { if (!pc) echec(erreurSync('reseau')); };
+      return lienSynchro(id, brute);
+    }
+    throw erreurSync('reseau');
+  };
+  s.rejoindre = async info => {
+    try { const brute = depuisB64u(info.cle); if (brute.length !== 16 && brute.length !== 32) throw 0; cle = await importerCle(brute); }
+    catch (e) { throw erreurSync('cle'); }
+    distant = info.id;
+    signal = new Signal('cd' + idAleatoire(14), recevoirSignal);
+    await signal.ouvrir();
+    if (s.fermee) { signal.fermer(); return; }
+    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') echec(erreurSync('reseau')); };
+    nouvellePC();
+    brancherCanal(pc.createDataChannel('carnet', {ordered:true}));
+    await pc.setLocalDescription(await pc.createOffer());
+    await envoyerSignal('OFFER', {sdp:descr(pc.localDescription)});
+    offreEnvoyee = true;
+    candidatsSortants.splice(0).forEach(c => envoyerSignal('CANDIDATE', {candidat:c}));
+    armerDelai(30000);
+  };
+  return s;
+}
+
+// Lecture du QR code avec l'appareil photo (détecteur intégré au navigateur)
+async function demarrerScan(video, surTexte){
+  let detecteur = null;
+  if ('BarcodeDetector' in window) { try { const f = await BarcodeDetector.getSupportedFormats(); if (f.includes('qr_code')) detecteur = new BarcodeDetector({formats:['qr_code']}); } catch (e) {} }
+  if (!detecteur) throw erreurSync('scan-impossible');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw erreurSync('camera-absente');
+  let flux;
+  try { flux = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false}); }
+  catch (e) { throw erreurSync(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'camera-refusee' : 'camera-absente'); }
+  video.muted = true; video.setAttribute('playsinline', ''); video.srcObject = flux;
+  try { await video.play(); } catch (e) {}
+  let actif = true;
+  const arreter = () => { if (!actif) return; actif = false; flux.getTracks().forEach(t => t.stop()); video.srcObject = null; };
+  (async () => {
+    while (actif) {
+      if (video.readyState >= 2) { try { const r = await detecteur.detect(video); for (const c of r) if (actif && surTexte(c.rawValue)) { arreter(); return; } } catch (e) {} }
+      await pause(180);
+    }
+  })();
+  return arreter;
+}
+
+/* Fenêtre de synchronisation */
+const ICONES = {
+  qr:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h3v3h-3zM20.5 14v.5M14 20.5h.5M17.5 20.5h3v-3"/></svg>',
+  photo:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8h3.2l1.8-2.7h7l1.8 2.7h3.2v11.2h-17z"/><circle cx="12" cy="13.3" r="3.6"/></svg>',
+  ok:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  erreur:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M12 6.5v7M12 17.5v.01"/></svg>'
+};
+const MESSAGES_SYNC = {
+  'hors-https':"La synchronisation fonctionne depuis l'appli installée (son adresse commence par https), pas depuis l'ancien fichier ouvert sur l'appareil.",
+  'non-pris-en-charge':'Ce navigateur ne permet pas la synchronisation. Utilise Chrome, Edge ou Firefox à jour.',
+  'reseau':"Impossible de joindre le service qui met les deux appareils en relation. Vérifie que cet appareil est bien connecté à internet, puis réessaie.",
+  'qr-inactif':"Ce QR code n'est plus actif. Affiche-en un nouveau sur l'autre appareil, puis scanne-le.",
+  'injoignable':"Les deux appareils n'arrivent pas à se connecter directement. Vérifie qu'ils sont sur le même Wi-Fi (pas en 4G, pas sur un réseau invité), puis réessaie.",
+  'cle':"Ce QR code ne correspond pas. Scanne le QR code affiché à l'instant sur l'autre appareil.",
+  'version':"Les deux appareils n'ont pas la même version de l'appli. Ferme puis rouvre l'appli sur les deux, puis réessaie.",
+  'coupure':"La connexion a été coupée avant la fin. Rien n'a été modifié : relance la synchronisation.",
+  'coupure-apres':"La connexion a été coupée juste avant la fin. Cet appareil est à jour ; relance la synchronisation pour mettre aussi l'autre à jour.",
+  'divergence':"La synchronisation s'est terminée, mais les deux carnets ne sont pas tout à fait identiques. Relance-la une fois.",
+  'scan-impossible':"Ce navigateur ne sait pas lire les QR codes dans l'appli. Ouvre plutôt l'appli Appareil photo du téléphone (ou Google Lens) et vise le QR code : le lien ouvrira le Carnet et lancera la synchronisation.",
+  'camera-refusee':"L'accès à l'appareil photo a été refusé. Autorise-le pour cette appli dans les réglages du navigateur, ou vise le QR code avec l'appli Appareil photo du téléphone.",
+  'camera-absente':"Aucun appareil photo n'est disponible ici. Sur cet appareil, choisis plutôt « Afficher le QR code »."
+};
+let synchro = null, arretScan = null;
+function arreterSynchro(){ if (arretScan) { arretScan(); arretScan = null; } if (synchro) { synchro.fermer(); synchro = null; } }
+function ecranSynchro(corps, pied){ const c = $('#syncCorps'), p = $('#syncPied'); if (!c || !p) return false; c.innerHTML = corps; p.innerHTML = pied; return true; }
+const piedFermer = (principal = false) => `<span class="espace"></span><button type="button" class="btn${principal ? ' btn-plein' : ''}" data-dlg="fermer">Fermer</button>`;
+const piedRetour = `<button type="button" class="btn discret" data-dlg="sync-retour">Retour</button><span class="espace"></span><button type="button" class="btn" data-dlg="fermer">Fermer</button>`;
+const attente = t => `<p class="attente"><span class="rond" aria-hidden="true"></span><span>${t}</span></p>`;
+
+function ouvrirSynchro(rejoindre){
+  const dlg = $('#dlg'); dlg.className = 'etroit';
+  dlg.innerHTML = `<header class="dlg-tete"><h2 id="dlgTitre">Synchroniser</h2><p class="sous">Avec ton autre appareil, directement par le Wi-Fi</p></header>
+    <div class="dlg-corps" id="syncCorps" aria-live="polite"></div><footer class="dlg-pied" id="syncPied"></footer>`;
+  ouvrirDialogue({
+    surFermeture: arreterSynchro,
+    bloquer: () => !!(synchro && synchro.application),
+    clic: b => { const a = b.dataset.dlg; if (a === 'sync-hote') syncHote(); else if (a === 'sync-scan') syncScan(); else if (a === 'sync-retour') syncChoix(); else if (a === 'sync-annuler-derniere') annulerDerniereSynchro(); }
+  });
+  const imp = synchroPossible();
+  if (imp) return syncErreur(imp, false);
+  if (rejoindre) syncRejoindre(rejoindre); else syncChoix();
+}
+async function syncChoix(){
+  arreterSynchro();
+  const t = typeAppareil(), mobile = t !== 'ordinateur';
+  const conseil = '<span class="conseil">Conseillé ici</span>';
+  const optHote = `<button type="button" class="sync-option" data-dlg="sync-hote"><span class="ico">${ICONES.qr}</span><strong>Afficher le QR code${mobile ? '' : conseil}</strong><span class="sous">À faire sur l'ordinateur</span></button>`;
+  const optScan = `<button type="button" class="sync-option" data-dlg="sync-scan"><span class="ico">${ICONES.photo}</span><strong>Scanner le QR code${mobile ? conseil : ''}</strong><span class="sous">À faire sur le téléphone, avec l'appareil photo</span></button>`;
+  ecranSynchro(`<p class="aide">Ouvre le Carnet sur tes deux appareils, connectés au même Wi-Fi. L'un affiche un QR code, l'autre le scanne.</p>
+    <div class="sync-options">${mobile ? optScan + optHote : optHote + optScan}</div>
+    <p class="aide">Les fiches passent directement d'un appareil à l'autre, chiffrées avec une clé à usage unique contenue dans le QR code. Un service gratuit sert seulement à mettre les deux appareils en relation : il ne voit jamais tes fiches.</p>
+    <p id="syncAnnuler" class="sous" style="margin:14px 0 4px"></p>`, piedFermer());
+  let snap = null;
+  try { if (idb) { const v = await idbLire('avant-synchro'); if (v) snap = JSON.parse(v); } } catch (e) {}
+  const z = $('#syncAnnuler');
+  if (z && snap && snap.le) z.innerHTML = `Un souci après la synchronisation du ${fmtDate(snap.le.slice(0, 10))}&nbsp;? <button type="button" class="lien" data-dlg="sync-annuler-derniere">Remettre cet appareil comme avant</button>`;
+}
+function rappelsSynchro(s){
+  const actif = () => synchro === s;
+  return {
+    etape: (nom, appareil) => {
+      if (!actif()) return;
+      if (nom === 'connexion') ecranSynchro(`<div class="sync-centre">${attente("Connexion avec l'autre appareil…")}</div>`, piedFermer());
+      else if (nom === 'echange') ecranSynchro(`<div class="sync-centre">${attente(appareil ? `Échange des fiches avec ${nomAppareil(appareil)}…` : 'Connexion établie, échange des fiches…')}<p class="aide">Garde l'appli ouverte sur les deux appareils.</p></div>`, '<span class="espace"></span>');
+    },
+    appliquer: (resultat, appareil) => appliquerSynchro(resultat, appareil),
+    fini: (bilan, appareil) => { if (actif()) { synchro = null; syncFini(bilan, appareil); } },
+    erreur: code => { if (actif()) { synchro = null; syncErreur(code, true); } }
+  };
+}
+async function syncHote(){
+  arreterSynchro();
+  const r = {}, s = synchro = creerSession('hote', r);
+  Object.assign(r, rappelsSynchro(s));
+  ecranSynchro(`<div class="sync-centre">${attente('Préparation du QR code…')}</div>`, piedRetour);
+  let lien;
+  try { lien = await s.preparerHote(); } catch (e) { if (synchro === s) { synchro = null; s.fermer(); syncErreur(e.code || 'reseau', true); } return; }
+  if (!lien || synchro !== s) return;
+  ecranSynchro(`<div class="sync-centre">
+    <div class="qr-cadre">${QR.svg(lien, {label:'QR code de synchronisation'})}</div>
+    <p class="aide">Sur ton téléphone, ouvre le Carnet, touche « Synchroniser » puis « Scanner le QR code ». Tu peux aussi le viser avec l'appli Appareil photo.</p>
+    ${attente("En attente de l'autre appareil…")}
+    <p class="sous">Ce QR code ne sert qu'une fois et s'efface à la fermeture de cette fenêtre.</p></div>`, piedRetour);
+}
+async function syncScan(){
+  arreterSynchro();
+  ecranSynchro(`<div class="sync-centre"><div class="viseur"><video id="syncVideo" playsinline muted aria-label="Image de l'appareil photo"></video></div>
+    <p class="aide" id="syncScanAide">Vise le QR code affiché sur l'ordinateur.</p></div>`, piedRetour);
+  const video = $('#syncVideo');
+  let dernierAvis = 0;
+  try {
+    const arret = await demarrerScan(video, texte => {
+      const info = lireLienSynchro(texte);
+      if (info) { arretScan = null; syncRejoindre(info); return true; }
+      if (Date.now() - dernierAvis > 2500) { dernierAvis = Date.now(); const a = $('#syncScanAide'); if (a) a.textContent = "Ce QR code n'est pas celui du Carnet. Vise le QR code affiché par l'appli sur l'ordinateur."; }
+      return false;
+    });
+    if (!$('#syncVideo')) { arret(); return; } // fenêtre fermée entre-temps
+    arretScan = arret;
+  } catch (e) { syncErreur(e.code || 'camera-absente', true); }
+}
+async function syncRejoindre(info){
+  arreterSynchro();
+  const r = {}, s = synchro = creerSession('invite', r);
+  Object.assign(r, rappelsSynchro(s));
+  ecranSynchro(`<div class="sync-centre">${attente("Connexion à l'autre appareil…")}</div>`, piedFermer());
+  try { await s.rejoindre(info); } catch (e) { if (synchro === s) { synchro = null; s.fermer(); syncErreur(e.code || 'reseau', true); } }
+}
+async function appliquerSynchro(resultat, appareil){
+  if (idb) { try { await idbEcrire(JSON.stringify({le:new Date().toISOString(), etat}), 'avant-synchro'); } catch (e) {} }
+  const locaux = {};
+  Fusion.REGLAGES_LOCAUX.forEach(k => { locaux[k] = etat.reglages[k]; });
+  etat = normaliser({...etat, ...clone(resultat), reglages:{...clone(resultat.reglages), ...locaux}});
+  etat.reglages.derniereSynchro = new Date().toISOString();
+  etat.reglages.synchroAvec = appareil || '';
+  await ecrireMaintenant();
+  render();
+}
+const LIBELLES = {clients:['fiche', 'fiches'], questionnaires:['questionnaire', 'questionnaires'], seances:['séance', 'séances'], factures:['facture', 'factures']};
+function texteQuantites(o){
+  const p = [];
+  for (const k of COLLECTIONS) if (o[k]) p.push(`${o[k]} ${LIBELLES[k][o[k] > 1 ? 1 : 0]}`);
+  if (o.reglages) p.push('tes réglages');
+  return p.length > 1 ? p.slice(0, -1).join(', ') + ' et ' + p[p.length - 1] : (p[0] || '');
+}
+function syncFini(b, appareil){
+  const nom = nomAppareil(appareil);
+  const lignes = [];
+  const recus = texteQuantites(b.recus), envoyes = texteQuantites(b.envoyes), retires = texteQuantites(b.retires), effaces = texteQuantites(b.effaces || {});
+  const n = t => `<span class="nobr">n° ${esc(t)}</span>`;
+  if (recus) lignes.push(`<strong>Reçu de ${esc(nom)} :</strong> ${esc(recus)}`);
+  if (envoyes) lignes.push(`<strong>Envoyé à ${esc(nom)} :</strong> ${esc(envoyes)}`);
+  if (retires) lignes.push(`<strong>Supprimé aussi ici :</strong> ${esc(retires)}`);
+  if (effaces) lignes.push(`<strong>Supprimé aussi sur ${esc(nom)} :</strong> ${esc(effaces)}`);
+  b.renumerotees.forEach(x => lignes.push(`<strong>Facture renumérotée :</strong> ${esc(x.client || 'sans nom')}, ${n(x.ancien)} devenu ${n(x.nouveau)}. Le même numéro avait été utilisé sur tes deux appareils et cette facture n'avait pas encore été transmise.`));
+  b.doublons.forEach(x => lignes.push(`<strong>Numéro en double :</strong> deux factures déjà transmises portent le ${n(x.numero)}. Détails sur l'accueil.`));
+  ecranSynchro(`<div class="sync-centre"><div class="pastille-ok">${ICONES.ok}</div><h3 class="titre-bloc" style="margin:0 0 4px">Synchronisation terminée</h3>
+    ${lignes.length ? `<ul class="bilan">${lignes.map(l => `<li>${l}</li>`).join('')}</ul>` : `<p class="aide">Rien à échanger : tes deux carnets étaient déjà identiques.</p>`}
+    <p class="sous" style="margin-top:12px">Les deux appareils ont maintenant exactement les mêmes fiches.</p></div>`, piedFermer(true));
+  toast('Synchronisation terminée');
+}
+function syncErreur(code, retour){
+  ecranSynchro(`<div class="sync-centre"><div class="pastille-ok erreur">${ICONES.erreur}</div><h3 class="titre-bloc" style="margin:0 0 6px">La synchronisation n'a pas pu se faire</h3>
+    <p class="aide">${esc(MESSAGES_SYNC[code] || MESSAGES_SYNC.coupure)}</p></div>`,
+    retour ? `<button type="button" class="btn discret" data-dlg="sync-retour">Réessayer</button>${piedFermer()}` : piedFermer());
+}
+async function annulerDerniereSynchro(){
+  let snap = null;
+  try { const v = await idbLire('avant-synchro'); if (v) snap = JSON.parse(v); } catch (e) {}
+  if (!snap || !snap.etat) return;
+  const d = new Date(snap.le);
+  if (!confirm(`Remettre cet appareil exactement comme avant la synchronisation du ${fmtDate(snap.le.slice(0, 10))} à ${pad(d.getHours())}h${pad(d.getMinutes())} ?\n\nCe que tu as saisi ici depuis sera perdu. L'autre appareil n'est pas modifié : la prochaine synchronisation te renverra ses fiches.`)) return;
+  etat = migrer(normaliser(snap.etat));
+  try { await idbEcrire(JSON.stringify(null), 'avant-synchro'); } catch (e) {}
+  await ecrireMaintenant();
+  fermerDialogue(); location.hash = '#/'; render();
+  toast("Cet appareil est revenu à son état d'avant la synchronisation");
+}
+
+/* Appli installable et hors connexion */
+let invitationInstall = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); invitationInstall = e; const b = $('#btnInstaller'); if (b) b.hidden = false; });
+window.addEventListener('appinstalled', () => { invitationInstall = null; const b = $('#btnInstaller'); if (b) b.hidden = true; toast('Appli installée : tu la retrouves avec tes autres applis.'); });
+async function installer(){
+  if (!invitationInstall) return;
+  invitationInstall.prompt();
+  try { await invitationInstall.userChoice; } catch (e) {}
+  invitationInstall = null; const b = $('#btnInstaller'); if (b) b.hidden = true;
+}
+if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+
+/* ---------- Message éphémère ---------- */
+let minuteurToast = null;
+function toast(t, duree = 3200){ const el = $('#toast'); el.textContent = t; el.classList.add('visible'); clearTimeout(minuteurToast); minuteurToast = setTimeout(() => el.classList.remove('visible'), duree); }
+
+/* =========================================================
+   Événements
+   ========================================================= */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-action]');
+  if (!b || b.closest('dialog')) return;
+  const c = ui.clientId ? client(ui.clientId) : null;
+  const id = b.dataset.id;
+  switch (b.dataset.action) {
+    case 'client-nouveau': ouvrirNouveauClient(); break;
+    case 'exporter': exporter(); break;
+    case 'importer': $('#fichierImport').value = ''; $('#fichierImport').click(); break;
+    case 'reglages': ouvrirReglages(); break;
+    case 'synchro': ouvrirSynchro(null); break;
+    case 'installer': installer(); break;
+    case 'imprimer-fiche': if (c) imprimer(htmlImpFiche(c)); break;
+    case 'client-supprimer': if (c) {
+      const ns = etat.seances.filter(s => s.clientId === c.id).length;
+      if (confirm(`Supprimer définitivement la fiche de ${nomComplet(c)}, ses questionnaires et ses ${ns} séance${ns > 1 ? 's' : ''} ? Les factures déjà émises sont conservées pour ta comptabilité.`)) {
+        oublier('seances', etat.seances.filter(x => x.clientId === c.id).map(x => x.id)); oublier('questionnaires', etat.questionnaires.filter(x => x.clientId === c.id).map(x => x.id)); oublier('clients', c.id);
+        enregistrer(); location.hash = '#/'; toast('Fiche supprimée');
+      } } break;
+    case 'quest-nouveau': ui.questMode = {id:null, baseId:null}; majContenu(); break;
+    case 'quest-maj': { const q = dernierQuestionnaire(c.id); ui.questMode = {id:null, baseId:q && q.id}; majContenu(); break; }
+    case 'quest-modifier': ui.questMode = {id, baseId:null}; majContenu(); break;
+    case 'quest-voir': ui.questVue = id; majContenu(); break;
+    case 'quest-annuler': ui.questMode = null; majContenu(); $('#principal').scrollTop = 0; break;
+    case 'quest-supprimer': { const q = etat.questionnaires.find(x => x.id === id); if (q && confirm(`Supprimer le questionnaire du ${fmtDate(q.date)} ?`)) { oublier('questionnaires', id); ui.questMode = null; ui.questVue = null; enregistrer(); render(); toast('Questionnaire supprimé'); } break; }
+    case 'quest-imprimer': imprimer(htmlImpQuestionnaire(c, etat.questionnaires.find(x => x.id === id))); break;
+    case 'quest-imprimer-vierge': imprimer(htmlImpQuestionnaire(c, null)); break;
+    case 'seance-nouvelle': ouvrirSeance(c, null); break;
+    case 'seance-ouvrir': ouvrirSeance(c, id); break;
+    case 'facture-nouvelle': ouvrirFacture(c, null, null); break;
+    case 'facture-ouvrir': ouvrirFacture(c, id, null); break;
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'recherche') { ui.recherche = t.value; renderListe(); return; }
+  if (t.matches('[data-champ-client]')) {
+    const c = client(ui.clientId); if (!c) return;
+    const k = t.name;
+    c[k] = t.type === 'checkbox' ? t.checked : t.value;
+    if (k === 'consentRgpd') { c.consentRgpdDate = t.checked ? (c.consentRgpdDate || aujourdhui()) : ''; const sp = $('#rgpdDate'); if (sp) sp.textContent = t.checked ? `Accord noté le ${fmtDate(c.consentRgpdDate)}` : ''; }
+    c.majLe = new Date().toISOString();
+    enregistrer();
+    majEntete(c);
+    if (['prenom','nom','tel','email','ville'].includes(k)) renderListe();
+    const l = $(`[data-liens="${k}"]`); if (l) l.innerHTML = liensContact(k, t.value);
+  }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'choixMesure') { ui.mesure = t.value; majContenu(); return; }
+  if (t.id === 'fichierImport' && t.files && t.files[0]) { importer(t.files[0]); return; }
+  if (t.matches('.cases input[type=checkbox]') && t.checked) {
+    const grp = t.closest('.cases');
+    if (t.hasAttribute('data-aucun')) $$('input', grp).forEach(i => { if (i !== t) i.checked = false; });
+    else { const a = $('input[data-aucun]', grp); if (a) a.checked = false; }
+  }
+});
+document.addEventListener('submit', e => { if (e.target.id === 'formQuest') { e.preventDefault(); enregistrerQuestionnaire(e.target); } });
+
+/* =========================================================
+   Démarrage
+   ========================================================= */
+(async function demarrer(){
+  await charger();
+  route();
+  if (statutStockage === 'erreur') toast("Ce navigateur bloque l'enregistrement (navigation privée ?). Tes saisies seront perdues à la fermeture.", 9000);
+})();
+</script>
+</body>
+</html>
