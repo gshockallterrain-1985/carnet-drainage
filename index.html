@@ -1683,14 +1683,19 @@ async function importer(fichier){
    ---------------------------------------------------------
    Un appareil affiche un QR code : adresse de l'appli, identifiant de rendez-vous
    et clé secrète à usage unique (AES-GCM 128 bits). L'autre le scanne.
-   Le serveur public PeerJS sert seulement à relayer les messages de connexion
-   WebRTC, chiffrés avec la clé, qu'il ne voit jamais. Les fiches passent ensuite
-   directement d'un appareil à l'autre, chiffrées une seconde fois avec la clé.
+   Des services publics gratuits servent seulement à relayer les messages de
+   connexion WebRTC, chiffrés avec la clé, qu'ils ne voient jamais : le serveur
+   PeerJS et, en secours, deux relais MQTT publics (EMQX, HiveMQ). L'appareil qui
+   affiche le QR code écoute sur tous ceux qui répondent et les indique dans le
+   QR code ; l'autre utilise le premier qu'il arrive à joindre. Les fiches passent
+   ensuite directement d'un appareil à l'autre, chiffrées une seconde fois avec la clé.
    Pas de serveur relais (TURN) : si les appareils ne peuvent pas se joindre
    directement, la synchro échoue plutôt que de faire transiter les données ailleurs.
    ========================================================= */
 const SYNC = {
   serveur:'wss://0.peerjs.com:443/peerjs', cleServeur:'peerjs',
+  relais:[{code:'e', url:'wss://broker.emqx.io:8084/mqtt'}, {code:'h', url:'wss://broker.hivemq.com:8884/mqtt'}],
+  sujet:'carnet-drainage/v1/',
   ice:[{urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun.cloudflare.com:3478'}],
   protocole:1, morceau:15000
 };
@@ -1708,8 +1713,9 @@ function importerCle(brute){ return crypto.subtle.importKey('raw', brute, {name:
 async function chiffrer(cle, objet){ const iv = aleatoire(12); const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM', iv}, cle, new TextEncoder().encode(JSON.stringify(objet)))); const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12); return versB64u(out); }
 async function dechiffrer(cle, texte){ const u = depuisB64u(texte); const clair = await crypto.subtle.decrypt({name:'AES-GCM', iv:u.subarray(0, 12)}, cle, u.subarray(12)); return JSON.parse(new TextDecoder().decode(clair)); }
 async function empreinte(x){ const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(Fusion.canon(x)))); return Array.from(h, b => b.toString(16).padStart(2, '0')).join(''); }
-function lienSynchro(id, brute){ return `${location.origin}${location.pathname}#synchro=${id}.${versB64u(brute)}`; }
-function lireLienSynchro(texte){ const m = /#synchro=([a-z0-9]{6,40})\.([A-Za-z0-9_-]{20,64})/.exec(String(texte || '')); return m ? {id:m[1], cle:m[2]} : null; }
+// Le lien indique aussi les services de mise en relation sur lesquels l'appareil qui affiche le QR code écoute
+function lienSynchro(id, brute, canaux){ return `${location.origin}${location.pathname}#synchro=${id}.${versB64u(brute)}${canaux ? '.' + canaux : ''}`; }
+function lireLienSynchro(texte){ const m = /#synchro=([a-z0-9]{6,40})\.([A-Za-z0-9_-]{20,64})(?:\.([a-z]{1,8}))?/.exec(String(texte || '')); return m ? {id:m[1], cle:m[2], canaux:m[3] || 'p'} : null; }
 function synchroPossible(){
   if (location.protocol === 'file:' || !window.isSecureContext) return 'hors-https';
   if (!window.RTCPeerConnection || !window.WebSocket || !(window.crypto && crypto.subtle)) return 'non-pris-en-charge';
@@ -1738,6 +1744,107 @@ class Signal {
   }
   envoyer(m){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); } catch (e) {} }
   fermer(){ this.ferme = true; clearInterval(this.battement); try { if (this.ws) this.ws.close(); } catch (e) {} }
+}
+
+// Mise en relation de secours par un relais MQTT public (MQTT 3.1.1 sur WebSocket, QoS 0).
+// Chaque appareil s'abonne au sujet portant son identifiant ; les messages, déjà chiffrés, y sont déposés.
+const octets = (...parts) => { const n = parts.reduce((t, x) => t + x.length, 0), out = new Uint8Array(n); let i = 0; for (const x of parts) { out.set(x, i); i += x.length; } return out; };
+const chaineMqtt = t => { const b = new TextEncoder().encode(t); return octets([b.length >> 8, b.length & 255], b); };
+function longueurMqtt(n){ const out = []; do { let o = n % 128; n = Math.floor(n / 128); if (n > 0) o |= 128; out.push(o); } while (n > 0); return out; }
+class SignalMqtt {
+  constructor(id, surMessage, url){ this.id = id; this.surMessage = surMessage; this.url = url; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.tampon = new Uint8Array(0); }
+  ouvrir(){
+    return new Promise((ok, ko) => {
+      let ws, fini = false, delai = null;
+      const rate = () => { if (fini) return; fini = true; clearTimeout(delai); ko(erreurSync('reseau')); this.fermer(); };
+      try { ws = new WebSocket(this.url, ['mqtt']); ws.binaryType = 'arraybuffer'; }
+      catch (e) { ko(erreurSync('reseau')); return; }
+      this.ws = ws;
+      delai = setTimeout(rate, 10000);
+      ws.onopen = () => this.paquet(0x10, octets(chaineMqtt('MQTT'), [4, 2, 0, 60], chaineMqtt('cd' + idAleatoire(18))));
+      ws.onmessage = ev => {
+        let paquets; try { paquets = this.lire(new Uint8Array(ev.data)); } catch (e) { rate(); return; }
+        for (const [entete, corps] of paquets) {
+          const type = entete >> 4;
+          if (type === 2) { if (corps[1] !== 0) return rate(); this.paquet(0x82, octets([0, 1], chaineMqtt(SYNC.sujet + this.id), [0])); }
+          else if (type === 9 && !fini) {
+            if (corps[2] === 0x80) return rate();
+            fini = true; clearTimeout(delai); this.ouvert = true;
+            this.battement = setInterval(() => this.paquet(0xC0, []), 20000);
+            ok();
+          } else if (type === 3) {
+            const n = (corps[0] << 8) | corps[1], qos = (entete >> 1) & 3;
+            let m; try { m = JSON.parse(new TextDecoder().decode(corps.subarray(2 + n + (qos ? 2 : 0)))); } catch (e) { continue; }
+            if (m && typeof m === 'object' && typeof m.type === 'string' && m.src !== this.id) this.surMessage(m);
+          }
+        }
+      };
+      ws.onerror = () => {};
+      ws.onclose = () => { clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) rate(); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+    });
+  }
+  // Découpe le flux reçu en paquets MQTT (un message WebSocket peut en contenir plusieurs, ou un morceau)
+  lire(morceau){
+    this.tampon = octets(this.tampon, morceau);
+    const out = [];
+    for (;;) {
+      const t = this.tampon;
+      if (t.length < 2) break;
+      let rest = 0, mult = 1, i = 1, complet = false;
+      for (; i < t.length && i <= 4; i++) { rest += (t[i] & 127) * mult; mult *= 128; if (!(t[i] & 128)) { complet = true; i++; break; } }
+      if (!complet) { if (i > 4) throw new Error('paquet'); break; }
+      if (t.length < i + rest) break;
+      out.push([t[0], t.slice(i, i + rest)]);
+      this.tampon = t.slice(i + rest);
+    }
+    return out;
+  }
+  paquet(entete, corps){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(octets([entete], longueurMqtt(corps.length), corps)); } catch (e) {} }
+  envoyer(m){ if (this.ouvert && m && m.dst) this.paquet(0x30, octets(chaineMqtt(SYNC.sujet + m.dst), new TextEncoder().encode(JSON.stringify({type:m.type, src:this.id, payload:m.payload})))); }
+  fermer(){ this.ferme = true; clearInterval(this.battement); this.paquet(0xE0, []); this.ouvert = false; try { if (this.ws) this.ws.close(); } catch (e) {} }
+}
+
+// Services de mise en relation, dans l'ordre de préférence : p = PeerJS, puis les relais MQTT
+function canauxSignal(){
+  return [{code:'p', cree:(id, f) => new Signal(id, f)}].concat((SYNC.relais || []).map(r => ({code:r.code, cree:(id, f) => new SignalMqtt(id, f, r.url)})));
+}
+// Appareil qui affiche le QR code : écoute sur tous les services joignables et répond par celui que l'autre appareil a utilisé
+class SignalHote {
+  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.actifs = []; this.route = new Map(); this.surCoupure = null; this.ferme = false; }
+  async ouvrir(){
+    const depart = Date.now();
+    const essais = canauxSignal().map(async c => {
+      const sig = c.cree(this.id, m => { if (m && m.src) this.route.set(m.src, sig); this.surMessage(m); });
+      try { await sig.ouvrir(); } catch (e) { sig.fermer(); return; }
+      if (this.ferme) { sig.fermer(); return; }
+      sig.surCoupure = () => { this.actifs = this.actifs.filter(a => a.sig !== sig); if (!this.actifs.length && !this.ferme && this.surCoupure) this.surCoupure(); };
+      this.actifs.push({code:c.code, sig});
+    });
+    // On attend tous les services, ou 4 secondes dès qu'au moins un répond : un service lent ne retarde pas le QR code
+    await new Promise(fin => {
+      let restants = essais.length;
+      const verifier = () => { if (!restants || (this.actifs.length && Date.now() - depart >= 4000)) fin(); };
+      essais.forEach(e => e.finally(() => { restants--; verifier(); }));
+      setTimeout(verifier, 4000);
+    });
+    if (!this.actifs.length) throw erreurSync('reseau');
+    return canauxSignal().map(c => c.code).filter(k => this.actifs.some(a => a.code === k)).join('');
+  }
+  envoyer(m){ const sig = this.route.get(m.dst); if (sig && sig.ouvert) sig.envoyer(m); else this.actifs.forEach(a => a.sig.envoyer(m)); }
+  fermer(){ this.ferme = true; this.actifs.forEach(a => a.sig.fermer()); this.actifs = []; }
+}
+// Appareil qui scanne : essaie ensemble les services indiqués dans le QR code et garde le premier qui répond
+function ouvrirSignalInvite(id, surMessage, codes){
+  const liste = canauxSignal().filter(c => String(codes || 'p').includes(c.code));
+  if (!liste.length) return Promise.reject(erreurSync('reseau'));
+  return new Promise((ok, ko) => {
+    let gagnant = null, echecs = 0;
+    liste.forEach(c => {
+      const sig = c.cree(id, m => { if (sig === gagnant) surMessage(m); });
+      sig.ouvrir().then(() => { if (gagnant) { sig.fermer(); return; } gagnant = sig; ok(sig); },
+        () => { sig.fermer(); if (++echecs === liste.length) ko(erreurSync('reseau')); });
+    });
+  });
 }
 
 // Une synchronisation : « hote » affiche le QR code, « invite » le scanne
@@ -1884,24 +1991,23 @@ function creerSession(role, rappels){
   s.preparerHote = async () => {
     const brute = aleatoire(16);
     cle = await importerCle(brute);
-    for (let essai = 0; essai < 3; essai++) {
-      const id = 'cd' + idAleatoire(14);
-      signal = new Signal(id, recevoirSignal);
-      try { await signal.ouvrir(); }
-      catch (e) { signal = null; if (e.code === 'id-pris') continue; throw e; }
-      if (s.fermee) { signal.fermer(); return null; }
-      signal.surCoupure = () => { if (!pc) echec(erreurSync('reseau')); };
-      return lienSynchro(id, brute);
-    }
-    throw erreurSync('reseau');
+    const id = 'cd' + idAleatoire(14);
+    const hote = new SignalHote(id, recevoirSignal);
+    signal = hote;
+    let canaux;
+    try { canaux = await hote.ouvrir(); }
+    catch (e) { hote.fermer(); if (signal === hote) signal = null; throw e; }
+    if (s.fermee) { hote.fermer(); return null; }
+    hote.surCoupure = () => { if (!pc) echec(erreurSync('reseau')); };
+    return lienSynchro(id, brute, canaux);
   };
   s.rejoindre = async info => {
     try { const brute = depuisB64u(info.cle); if (brute.length !== 16 && brute.length !== 32) throw 0; cle = await importerCle(brute); }
     catch (e) { throw erreurSync('cle'); }
     distant = info.id;
-    signal = new Signal('cd' + idAleatoire(14), recevoirSignal);
-    await signal.ouvrir();
-    if (s.fermee) { signal.fermer(); return; }
+    const sig = await ouvrirSignalInvite('cd' + idAleatoire(14), recevoirSignal, info.canaux);
+    if (s.fermee) { sig.fermer(); return; }
+    signal = sig;
     signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') echec(erreurSync('reseau')); };
     nouvellePC();
     brancherCanal(pc.createDataChannel('carnet', {ordered:true}));
@@ -1946,7 +2052,7 @@ const ICONES = {
 const MESSAGES_SYNC = {
   'hors-https':"La synchronisation fonctionne depuis l'appli installée (son adresse commence par https), pas depuis l'ancien fichier ouvert sur l'appareil.",
   'non-pris-en-charge':'Ce navigateur ne permet pas la synchronisation. Utilise Chrome, Edge ou Firefox à jour.',
-  'reseau':"Impossible de joindre le service qui met les deux appareils en relation. Vérifie que cet appareil est bien connecté à internet, puis réessaie.",
+  'reseau':"Impossible de joindre les services qui mettent les deux appareils en relation. Vérifie que cet appareil est bien connecté à internet, puis réessaie dans quelques minutes.",
   'qr-inactif':"Ce QR code n'est plus actif. Affiche-en un nouveau sur l'autre appareil, puis scanne-le.",
   'injoignable':"Les deux appareils n'arrivent pas à se connecter directement. Vérifie qu'ils sont sur le même Wi-Fi (pas en 4G, pas sur un réseau invité), puis réessaie.",
   'cle':"Ce QR code ne correspond pas. Scanne le QR code affiché à l'instant sur l'autre appareil.",
@@ -1986,7 +2092,7 @@ async function syncChoix(){
   const optScan = `<button type="button" class="sync-option" data-dlg="sync-scan"><span class="ico">${ICONES.photo}</span><strong>Scanner le QR code${mobile ? conseil : ''}</strong><span class="sous">À faire sur le téléphone, avec l'appareil photo</span></button>`;
   ecranSynchro(`<p class="aide">Ouvre le Carnet sur tes deux appareils, connectés au même Wi-Fi. L'un affiche un QR code, l'autre le scanne.</p>
     <div class="sync-options">${mobile ? optScan + optHote : optHote + optScan}</div>
-    <p class="aide">Les fiches passent directement d'un appareil à l'autre, chiffrées avec une clé à usage unique contenue dans le QR code. Un service gratuit sert seulement à mettre les deux appareils en relation : il ne voit jamais tes fiches.</p>
+    <p class="aide">Les fiches passent directement d'un appareil à l'autre, chiffrées avec une clé à usage unique contenue dans le QR code. Des services gratuits servent seulement à mettre les deux appareils en relation : ils ne voient jamais tes fiches.</p>
     <p id="syncAnnuler" class="sous" style="margin:14px 0 4px"></p>`, piedFermer());
   let snap = null;
   try { if (idb) { const v = await idbLire('avant-synchro'); if (v) snap = JSON.parse(v); } } catch (e) {}
