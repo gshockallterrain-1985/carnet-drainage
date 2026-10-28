@@ -1724,8 +1724,8 @@ function synchroPossible(){
 
 // Détail technique gardé pour l'écran d'erreur : quels services ont été essayés et pourquoi ils ont échoué
 const NOMS_SERVICES = {p:'PeerJS', e:'EMQX', h:'HiveMQ'};
-const DIAG = {role:'', liste:'', services:{}, apres:''};
-function diagInit(role, liste){ DIAG.role = role; DIAG.liste = liste || ''; DIAG.services = {}; DIAG.apres = ''; }
+const DIAG = {role:'', liste:'', services:{}, apres:'', coupures:[]};
+function diagInit(role, liste){ DIAG.role = role; DIAG.liste = liste || ''; DIAG.services = {}; DIAG.apres = ''; if (role === 'hote') DIAG.coupures = []; }
 
 // Connexion au serveur de mise en relation (protocole du serveur PeerJS)
 class Signal {
@@ -1853,6 +1853,7 @@ function ouvrirSignalInvite(id, surMessage, codes){
     let gagnant = null, echecs = 0;
     liste.forEach(c => {
       const sig = c.cree(id, m => { if (sig === gagnant) surMessage(m); });
+      sig.code = c.code;
       sig.ouvrir().then(() => { DIAG.services[c.code] = 'ok'; if (gagnant) { sig.fermer(); return; } gagnant = sig; ok(sig); },
         () => { DIAG.services[c.code] = sig.motif || 'échec'; sig.fermer(); if (++echecs === liste.length) ko(erreurSync('reseau')); });
     });
@@ -1901,6 +1902,13 @@ function creerSession(role, rappels){
     const surEtat = () => { if (pc && (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed')) echec(erreurSync('injoignable')); };
     pc.onconnectionstatechange = surEtat; pc.oniceconnectionstatechange = surEtat;
   }
+  // Abandonne la connexion en cours (sans déclencher d'erreur) pour en recommencer une autre
+  function oublierConnexion(){
+    clearTimeout(minuterie);
+    if (canal) { canal.onopen = canal.onmessage = canal.onclose = canal.onerror = null; try { canal.close(); } catch (e) {} }
+    if (pc) { pc.onicecandidate = pc.onconnectionstatechange = pc.oniceconnectionstatechange = pc.ondatachannel = null; try { pc.close(); } catch (e) {} }
+    pc = null; canal = null; descriptionDistante = false; offreEnvoyee = false; candidatsRecus = []; candidatsSortants = []; morceaux.clear();
+  }
   async function viderCandidats(){ descriptionDistante = true; const l = candidatsRecus; candidatsRecus = []; for (const c of l) { try { await pc.addIceCandidate(c); } catch (e) {} } }
 
   async function surSignal(m){
@@ -1917,7 +1925,12 @@ function creerSession(role, rappels){
     }
     if (!contenu || contenu.de === role) return;
     if (m.type === 'OFFER' && role === 'hote') {
-      if (pc) return; // une seule synchro à la fois
+      if (pc) {
+        // Même appareil déjà en cours, ou échange déjà ouvert : on ignore. Sinon c'est une nouvelle tentative
+        // (par un autre service de mise en relation) : on repart de zéro avec elle.
+        if (m.src === distant || (canal && canal.readyState === 'open')) return;
+        oublierConnexion();
+      }
       distant = m.src;
       rappels.etape('connexion');
       nouvellePC();
@@ -2017,10 +2030,23 @@ function creerSession(role, rappels){
     try { const brute = depuisB64u(info.cle); if (brute.length !== 16 && brute.length !== 32) throw 0; cle = await importerCle(brute); }
     catch (e) { throw erreurSync('cle'); }
     distant = info.id;
-    const sig = await ouvrirSignalInvite('cd' + idAleatoire(14), recevoirSignal, info.canaux);
+    DIAG.coupures = [];
+    await tenter(String(info.canaux || 'p'));
+  };
+  // Une tentative de connexion à l'appareil qui affiche le QR code, par les services indiqués dans le QR code.
+  // Si le service retenu coupe la connexion avant la réponse, on recommence avec les autres services indiqués.
+  async function tenter(codes){
+    const sig = await ouvrirSignalInvite('cd' + idAleatoire(14), recevoirSignal, codes);
     if (s.fermee) { sig.fermer(); return; }
     signal = sig;
-    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') { DIAG.apres = 'connexion aux services perdue avant la réponse de l\'autre appareil (' + ((signal && signal.motif) || 'motif inconnu') + ')'; echec(erreurSync('reseau')); } };
+    sig.surCoupure = () => {
+      if (s.fermee || signal !== sig || (canal && canal.readyState === 'open')) return;
+      DIAG.coupures.push(`${NOMS_SERVICES[sig.code] || sig.code || 'service'} ${sig.motif || 'coupé'}`);
+      const reste = codes.split('').filter(k => k !== sig.code).join('');
+      if (!reste) { DIAG.apres = 'plus aucun service à essayer'; echec(erreurSync('reseau')); return; }
+      oublierConnexion();
+      tenter(reste).catch(echec);
+    };
     nouvellePC();
     brancherCanal(pc.createDataChannel('carnet', {ordered:true}));
     await pc.setLocalDescription(await pc.createOffer());
@@ -2028,7 +2054,7 @@ function creerSession(role, rappels){
     offreEnvoyee = true;
     candidatsSortants.splice(0).forEach(c => envoyerSignal('CANDIDATE', {candidat:c}));
     armerDelai(30000);
-  };
+  }
   return s;
 }
 
@@ -2199,9 +2225,10 @@ function detailReseau(){
   const nom = k => NOMS_SERVICES[k] || k;
   const lignes = Object.keys(DIAG.services).map(k => `${nom(k)} : ${DIAG.services[k]}`);
   if (DIAG.role === 'invite') DIAG.liste.split('').filter(k => !(k in DIAG.services)).forEach(k => lignes.push(`${nom(k)} : pas encore de réponse`));
-  if (!DIAG.role && !lignes.length && !DIAG.apres) return '';
+  if (!DIAG.role && !lignes.length && !DIAG.apres && !DIAG.coupures.length) return '';
   const debut = DIAG.role === 'invite' ? `Cet appareil scannait le QR code, qui indiquait : ${DIAG.liste.split('').map(nom).join(', ') || 'rien'}.` : (DIAG.role === 'hote' ? 'Cet appareil affichait le QR code.' : '');
-  return [debut, lignes.join(' ; '), DIAG.apres].filter(Boolean).map(t => /[.)]$/.test(t) ? t : t + '.').join(' ');
+  const avant = DIAG.coupures.length ? 'Connexions déjà coupées : ' + DIAG.coupures.join(' ; ') : '';
+  return [debut, avant, lignes.join(' ; '), DIAG.apres].filter(Boolean).map(t => /\.$/.test(t) ? t : t + '.').join(' ');
 }
 function syncErreur(code, retour){
   const detail = code === 'reseau' ? detailReseau() : '';
