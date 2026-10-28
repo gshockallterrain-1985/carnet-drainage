@@ -1729,7 +1729,7 @@ function diagInit(role, liste){ DIAG.role = role; DIAG.liste = liste || ''; DIAG
 
 // Connexion au serveur de mise en relation (protocole du serveur PeerJS)
 class Signal {
-  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.motif = ''; }
+  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.motif = ''; this.tOuvert = 0; this.envoyes = 0; }
   ouvrir(){
     return new Promise((ok, ko) => {
       let ws;
@@ -1739,15 +1739,15 @@ class Signal {
       const delai = setTimeout(() => { if (!this.motif) this.motif = 'pas de réponse en 12 s'; ko(erreurSync('reseau')); this.fermer(); }, 12000);
       ws.onmessage = ev => {
         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.type === 'OPEN') { clearTimeout(delai); this.ouvert = true; this.battement = setInterval(() => this.envoyer({type:'HEARTBEAT'}), 5000); ok(); return; }
+        if (m.type === 'OPEN') { clearTimeout(delai); this.ouvert = true; this.tOuvert = Date.now(); this.battement = setInterval(() => this.envoyer({type:'HEARTBEAT'}), 5000); ok(); return; }
         if (m.type === 'ID-TAKEN' || m.type === 'ERROR') { clearTimeout(delai); this.motif = m.type === 'ID-TAKEN' ? 'identifiant déjà pris' : 'erreur renvoyée par le serveur'; ko(erreurSync(m.type === 'ID-TAKEN' ? 'id-pris' : 'reseau')); this.fermer(); return; }
         if (m.type !== 'HEARTBEAT') this.surMessage(m);
       };
       ws.onerror = () => {};
-      ws.onclose = ev => { clearTimeout(delai); clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) { if (!this.motif) this.motif = 'connexion refusée ou coupée (code ' + (ev && ev.code) + ')'; ko(erreurSync('reseau')); } else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+      ws.onclose = ev => { clearTimeout(delai); clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) { if (!this.motif) this.motif = 'connexion refusée ou coupée (code ' + (ev && ev.code) + ')'; ko(erreurSync('reseau')); } else if (!this.ferme && this.surCoupure) { this.motif = 'coupée (code ' + (ev && ev.code) + ') ' + Math.round((Date.now() - this.tOuvert) / 1000) + ' s après l\'ouverture, ' + this.envoyes + ' message(s) envoyé(s)'; this.surCoupure(); } };
     });
   }
-  envoyer(m){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); } catch (e) {} }
+  envoyer(m){ try { if (this.ws && this.ws.readyState === 1) { this.ws.send(JSON.stringify(m)); if (m.type !== 'HEARTBEAT') this.envoyes++; } } catch (e) {} }
   fermer(){ this.ferme = true; clearInterval(this.battement); try { if (this.ws) this.ws.close(); } catch (e) {} }
 }
 
@@ -1757,7 +1757,7 @@ const octets = (...parts) => { const n = parts.reduce((t, x) => t + x.length, 0)
 const chaineMqtt = t => { const b = new TextEncoder().encode(t); return octets([b.length >> 8, b.length & 255], b); };
 function longueurMqtt(n){ const out = []; do { let o = n % 128; n = Math.floor(n / 128); if (n > 0) o |= 128; out.push(o); } while (n > 0); return out; }
 class SignalMqtt {
-  constructor(id, surMessage, url){ this.id = id; this.surMessage = surMessage; this.url = url; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.tampon = new Uint8Array(0); this.motif = ''; }
+  constructor(id, surMessage, url){ this.id = id; this.surMessage = surMessage; this.url = url; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.tampon = new Uint8Array(0); this.motif = ''; this.tOuvert = 0; this.envoyes = 0; }
   ouvrir(){
     return new Promise((ok, ko) => {
       let ws, fini = false, delai = null;
@@ -1774,7 +1774,7 @@ class SignalMqtt {
           if (type === 2) { if (corps[1] !== 0) return rate('connexion refusée par le relais'); this.paquet(0x82, octets([0, 1], chaineMqtt(SYNC.sujet + this.id), [0])); }
           else if (type === 9 && !fini) {
             if (corps[2] === 0x80) return rate('abonnement refusé par le relais');
-            fini = true; clearTimeout(delai); this.ouvert = true;
+            fini = true; clearTimeout(delai); this.ouvert = true; this.tOuvert = Date.now();
             this.battement = setInterval(() => this.paquet(0xC0, []), 20000);
             ok();
           } else if (type === 3) {
@@ -1785,7 +1785,7 @@ class SignalMqtt {
         }
       };
       ws.onerror = () => {};
-      ws.onclose = ev => { clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) rate('connexion refusée ou coupée (code ' + (ev && ev.code) + ')'); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+      ws.onclose = ev => { clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) rate('connexion refusée ou coupée (code ' + (ev && ev.code) + ')'); else if (!this.ferme && this.surCoupure) { this.motif = 'coupée (code ' + (ev && ev.code) + ') ' + Math.round((Date.now() - this.tOuvert) / 1000) + ' s après l\'ouverture, ' + this.envoyes + ' message(s) envoyé(s)'; this.surCoupure(); } };
     });
   }
   // Découpe le flux reçu en paquets MQTT (un message WebSocket peut en contenir plusieurs, ou un morceau)
@@ -1805,7 +1805,7 @@ class SignalMqtt {
     return out;
   }
   paquet(entete, corps){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(octets([entete], longueurMqtt(corps.length), corps)); } catch (e) {} }
-  envoyer(m){ if (this.ouvert && m && m.dst) this.paquet(0x30, octets(chaineMqtt(SYNC.sujet + m.dst), new TextEncoder().encode(JSON.stringify({type:m.type, src:this.id, payload:m.payload})))); }
+  envoyer(m){ if (this.ouvert && m && m.dst) this.envoyes++; if (this.ouvert && m && m.dst) this.paquet(0x30, octets(chaineMqtt(SYNC.sujet + m.dst), new TextEncoder().encode(JSON.stringify({type:m.type, src:this.id, payload:m.payload})))); }
   fermer(){ this.ferme = true; clearInterval(this.battement); this.paquet(0xE0, []); this.ouvert = false; try { if (this.ws) this.ws.close(); } catch (e) {} }
 }
 
@@ -1826,7 +1826,7 @@ class SignalHote {
         try { await sig.ouvrir(); } catch (e) { DIAG.services[c.code] = sig.motif || 'échec'; sig.fermer(); return; }
         if (this.ferme) { sig.fermer(); return; }
         DIAG.services[c.code] = 'ok';
-        sig.surCoupure = () => { this.actifs = this.actifs.filter(a => a.sig !== sig); if (!this.actifs.length && !this.ferme && this.surCoupure) { DIAG.apres = 'connexion aux services perdue pendant l\'attente'; this.surCoupure(); } };
+        sig.surCoupure = () => { this.actifs = this.actifs.filter(a => a.sig !== sig); if (!this.actifs.length && !this.ferme && this.surCoupure) { DIAG.apres = 'connexion aux services perdue pendant l\'attente (' + (sig.motif || 'motif inconnu') + ')'; this.surCoupure(); } };
         this.actifs.push({code:c.code, sig});
       } finally { if (c.code === 'p') peerjsFini = true; }
     });
@@ -2010,7 +2010,7 @@ function creerSession(role, rappels){
     try { canaux = await hote.ouvrir(); }
     catch (e) { hote.fermer(); if (signal === hote) signal = null; throw e; }
     if (s.fermee) { hote.fermer(); return null; }
-    hote.surCoupure = () => { if (!pc) { DIAG.apres = 'connexion aux services perdue pendant l\'attente'; echec(erreurSync('reseau')); } };
+    hote.surCoupure = () => { if (!pc) { if (!DIAG.apres) DIAG.apres = 'connexion aux services perdue pendant l\'attente'; echec(erreurSync('reseau')); } };
     return lienSynchro(id, brute, canaux);
   };
   s.rejoindre = async info => {
@@ -2020,7 +2020,7 @@ function creerSession(role, rappels){
     const sig = await ouvrirSignalInvite('cd' + idAleatoire(14), recevoirSignal, info.canaux);
     if (s.fermee) { sig.fermer(); return; }
     signal = sig;
-    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') { DIAG.apres = 'connexion aux services perdue avant la réponse de l\'autre appareil'; echec(erreurSync('reseau')); } };
+    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') { DIAG.apres = 'connexion aux services perdue avant la réponse de l\'autre appareil (' + ((signal && signal.motif) || 'motif inconnu') + ')'; echec(erreurSync('reseau')); } };
     nouvellePC();
     brancherCanal(pc.createDataChannel('carnet', {ordered:true}));
     await pc.setLocalDescription(await pc.createOffer());
@@ -2198,9 +2198,10 @@ function syncFini(b, appareil){
 function detailReseau(){
   const nom = k => NOMS_SERVICES[k] || k;
   const lignes = Object.keys(DIAG.services).map(k => `${nom(k)} : ${DIAG.services[k]}`);
+  if (DIAG.role === 'invite') DIAG.liste.split('').filter(k => !(k in DIAG.services)).forEach(k => lignes.push(`${nom(k)} : pas encore de réponse`));
   if (!DIAG.role && !lignes.length && !DIAG.apres) return '';
   const debut = DIAG.role === 'invite' ? `Cet appareil scannait le QR code, qui indiquait : ${DIAG.liste.split('').map(nom).join(', ') || 'rien'}.` : (DIAG.role === 'hote' ? 'Cet appareil affichait le QR code.' : '');
-  return [debut, lignes.join(' ; '), DIAG.apres].filter(Boolean).join(' ');
+  return [debut, lignes.join(' ; '), DIAG.apres].filter(Boolean).map(t => /[.)]$/.test(t) ? t : t + '.').join(' ');
 }
 function syncErreur(code, retour){
   const detail = code === 'reseau' ? detailReseau() : '';

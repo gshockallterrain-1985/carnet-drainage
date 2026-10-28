@@ -1,7 +1,7 @@
 /* Service worker du Carnet de drainage : permet d'ouvrir l'appli sans connexion.
    Il ne met en cache que le code de l'appli, jamais les fiches (elles restent dans le stockage de l'appareil). */
 'use strict';
-const VERSION = 'carnet-2026-10-28-2';
+const VERSION = 'carnet-2026-10-28-3';
 const FICHIERS = ['./', 'index.html', 'qr.js', 'fusion.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'];
 
