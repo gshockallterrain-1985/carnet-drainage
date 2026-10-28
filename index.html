@@ -1722,24 +1722,29 @@ function synchroPossible(){
   return null;
 }
 
+// Détail technique gardé pour l'écran d'erreur : quels services ont été essayés et pourquoi ils ont échoué
+const NOMS_SERVICES = {p:'PeerJS', e:'EMQX', h:'HiveMQ'};
+const DIAG = {role:'', liste:'', services:{}, apres:''};
+function diagInit(role, liste){ DIAG.role = role; DIAG.liste = liste || ''; DIAG.services = {}; DIAG.apres = ''; }
+
 // Connexion au serveur de mise en relation (protocole du serveur PeerJS)
 class Signal {
-  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; }
+  constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.motif = ''; }
   ouvrir(){
     return new Promise((ok, ko) => {
       let ws;
       try { ws = new WebSocket(`${SYNC.serveur}?key=${encodeURIComponent(SYNC.cleServeur)}&id=${this.id}&token=${idAleatoire(12)}&version=1.5.4`); }
-      catch (e) { ko(erreurSync('reseau')); return; }
+      catch (e) { this.motif = 'ouverture impossible'; ko(erreurSync('reseau')); return; }
       this.ws = ws;
-      const delai = setTimeout(() => { ko(erreurSync('reseau')); this.fermer(); }, 12000);
+      const delai = setTimeout(() => { if (!this.motif) this.motif = 'pas de réponse en 12 s'; ko(erreurSync('reseau')); this.fermer(); }, 12000);
       ws.onmessage = ev => {
         let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
         if (m.type === 'OPEN') { clearTimeout(delai); this.ouvert = true; this.battement = setInterval(() => this.envoyer({type:'HEARTBEAT'}), 5000); ok(); return; }
-        if (m.type === 'ID-TAKEN' || m.type === 'ERROR') { clearTimeout(delai); ko(erreurSync(m.type === 'ID-TAKEN' ? 'id-pris' : 'reseau')); this.fermer(); return; }
+        if (m.type === 'ID-TAKEN' || m.type === 'ERROR') { clearTimeout(delai); this.motif = m.type === 'ID-TAKEN' ? 'identifiant déjà pris' : 'erreur renvoyée par le serveur'; ko(erreurSync(m.type === 'ID-TAKEN' ? 'id-pris' : 'reseau')); this.fermer(); return; }
         if (m.type !== 'HEARTBEAT') this.surMessage(m);
       };
       ws.onerror = () => {};
-      ws.onclose = () => { clearTimeout(delai); clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) ko(erreurSync('reseau')); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+      ws.onclose = ev => { clearTimeout(delai); clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) { if (!this.motif) this.motif = 'connexion refusée ou coupée (code ' + (ev && ev.code) + ')'; ko(erreurSync('reseau')); } else if (!this.ferme && this.surCoupure) this.surCoupure(); };
     });
   }
   envoyer(m){ try { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); } catch (e) {} }
@@ -1752,23 +1757,23 @@ const octets = (...parts) => { const n = parts.reduce((t, x) => t + x.length, 0)
 const chaineMqtt = t => { const b = new TextEncoder().encode(t); return octets([b.length >> 8, b.length & 255], b); };
 function longueurMqtt(n){ const out = []; do { let o = n % 128; n = Math.floor(n / 128); if (n > 0) o |= 128; out.push(o); } while (n > 0); return out; }
 class SignalMqtt {
-  constructor(id, surMessage, url){ this.id = id; this.surMessage = surMessage; this.url = url; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.tampon = new Uint8Array(0); }
+  constructor(id, surMessage, url){ this.id = id; this.surMessage = surMessage; this.url = url; this.ws = null; this.ouvert = false; this.ferme = false; this.battement = null; this.surCoupure = null; this.tampon = new Uint8Array(0); this.motif = ''; }
   ouvrir(){
     return new Promise((ok, ko) => {
       let ws, fini = false, delai = null;
-      const rate = () => { if (fini) return; fini = true; clearTimeout(delai); ko(erreurSync('reseau')); this.fermer(); };
+      const rate = motif => { if (fini) return; fini = true; clearTimeout(delai); if (motif && !this.motif) this.motif = motif; ko(erreurSync('reseau')); this.fermer(); };
       try { ws = new WebSocket(this.url, ['mqtt']); ws.binaryType = 'arraybuffer'; }
-      catch (e) { ko(erreurSync('reseau')); return; }
+      catch (e) { this.motif = 'ouverture impossible'; ko(erreurSync('reseau')); return; }
       this.ws = ws;
-      delai = setTimeout(rate, 10000);
+      delai = setTimeout(() => rate('pas de réponse en 10 s'), 10000);
       ws.onopen = () => this.paquet(0x10, octets(chaineMqtt('MQTT'), [4, 2, 0, 60], chaineMqtt('cd' + idAleatoire(18))));
       ws.onmessage = ev => {
-        let paquets; try { paquets = this.lire(new Uint8Array(ev.data)); } catch (e) { rate(); return; }
+        let paquets; try { paquets = this.lire(new Uint8Array(ev.data)); } catch (e) { rate('réponse illisible'); return; }
         for (const [entete, corps] of paquets) {
           const type = entete >> 4;
-          if (type === 2) { if (corps[1] !== 0) return rate(); this.paquet(0x82, octets([0, 1], chaineMqtt(SYNC.sujet + this.id), [0])); }
+          if (type === 2) { if (corps[1] !== 0) return rate('connexion refusée par le relais'); this.paquet(0x82, octets([0, 1], chaineMqtt(SYNC.sujet + this.id), [0])); }
           else if (type === 9 && !fini) {
-            if (corps[2] === 0x80) return rate();
+            if (corps[2] === 0x80) return rate('abonnement refusé par le relais');
             fini = true; clearTimeout(delai); this.ouvert = true;
             this.battement = setInterval(() => this.paquet(0xC0, []), 20000);
             ok();
@@ -1780,7 +1785,7 @@ class SignalMqtt {
         }
       };
       ws.onerror = () => {};
-      ws.onclose = () => { clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) rate(); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
+      ws.onclose = ev => { clearInterval(this.battement); const etaitOuvert = this.ouvert; this.ouvert = false; if (!etaitOuvert) rate('connexion refusée ou coupée (code ' + (ev && ev.code) + ')'); else if (!this.ferme && this.surCoupure) this.surCoupure(); };
     });
   }
   // Découpe le flux reçu en paquets MQTT (un message WebSocket peut en contenir plusieurs, ou un morceau)
@@ -1813,17 +1818,23 @@ class SignalHote {
   constructor(id, surMessage){ this.id = id; this.surMessage = surMessage; this.actifs = []; this.route = new Map(); this.surCoupure = null; this.ferme = false; }
   async ouvrir(){
     const depart = Date.now();
+    diagInit('hote');
+    let peerjsFini = false;
     const essais = canauxSignal().map(async c => {
       const sig = c.cree(this.id, m => { if (m && m.src) this.route.set(m.src, sig); this.surMessage(m); });
-      try { await sig.ouvrir(); } catch (e) { sig.fermer(); return; }
-      if (this.ferme) { sig.fermer(); return; }
-      sig.surCoupure = () => { this.actifs = this.actifs.filter(a => a.sig !== sig); if (!this.actifs.length && !this.ferme && this.surCoupure) this.surCoupure(); };
-      this.actifs.push({code:c.code, sig});
+      try {
+        try { await sig.ouvrir(); } catch (e) { DIAG.services[c.code] = sig.motif || 'échec'; sig.fermer(); return; }
+        if (this.ferme) { sig.fermer(); return; }
+        DIAG.services[c.code] = 'ok';
+        sig.surCoupure = () => { this.actifs = this.actifs.filter(a => a.sig !== sig); if (!this.actifs.length && !this.ferme && this.surCoupure) { DIAG.apres = 'connexion aux services perdue pendant l\'attente'; this.surCoupure(); } };
+        this.actifs.push({code:c.code, sig});
+      } finally { if (c.code === 'p') peerjsFini = true; }
     });
-    // On attend tous les services, ou 4 secondes dès qu'au moins un répond : un service lent ne retarde pas le QR code
+    // On attend tous les services, ou 4 secondes dès qu'au moins un répond ET que PeerJS (le plus fiable) a répondu ou échoué
+    // (12 secondes au plus) : un relais lent ne retarde pas le QR code, mais l'autre appareil retrouve PeerJS dans le QR code s'il fonctionne
     await new Promise(fin => {
       let restants = essais.length;
-      const verifier = () => { if (!restants || (this.actifs.length && Date.now() - depart >= 4000)) fin(); };
+      const verifier = () => { if (!restants || (peerjsFini && this.actifs.length && Date.now() - depart >= 4000)) fin(); };
       essais.forEach(e => e.finally(() => { restants--; verifier(); }));
       setTimeout(verifier, 4000);
     });
@@ -1836,13 +1847,14 @@ class SignalHote {
 // Appareil qui scanne : essaie ensemble les services indiqués dans le QR code et garde le premier qui répond
 function ouvrirSignalInvite(id, surMessage, codes){
   const liste = canauxSignal().filter(c => String(codes || 'p').includes(c.code));
+  diagInit('invite', liste.map(c => c.code).join(''));
   if (!liste.length) return Promise.reject(erreurSync('reseau'));
   return new Promise((ok, ko) => {
     let gagnant = null, echecs = 0;
     liste.forEach(c => {
       const sig = c.cree(id, m => { if (sig === gagnant) surMessage(m); });
-      sig.ouvrir().then(() => { if (gagnant) { sig.fermer(); return; } gagnant = sig; ok(sig); },
-        () => { sig.fermer(); if (++echecs === liste.length) ko(erreurSync('reseau')); });
+      sig.ouvrir().then(() => { DIAG.services[c.code] = 'ok'; if (gagnant) { sig.fermer(); return; } gagnant = sig; ok(sig); },
+        () => { DIAG.services[c.code] = sig.motif || 'échec'; sig.fermer(); if (++echecs === liste.length) ko(erreurSync('reseau')); });
     });
   });
 }
@@ -1998,7 +2010,7 @@ function creerSession(role, rappels){
     try { canaux = await hote.ouvrir(); }
     catch (e) { hote.fermer(); if (signal === hote) signal = null; throw e; }
     if (s.fermee) { hote.fermer(); return null; }
-    hote.surCoupure = () => { if (!pc) echec(erreurSync('reseau')); };
+    hote.surCoupure = () => { if (!pc) { DIAG.apres = 'connexion aux services perdue pendant l\'attente'; echec(erreurSync('reseau')); } };
     return lienSynchro(id, brute, canaux);
   };
   s.rejoindre = async info => {
@@ -2008,7 +2020,7 @@ function creerSession(role, rappels){
     const sig = await ouvrirSignalInvite('cd' + idAleatoire(14), recevoirSignal, info.canaux);
     if (s.fermee) { sig.fermer(); return; }
     signal = sig;
-    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') echec(erreurSync('reseau')); };
+    signal.surCoupure = () => { if (!canal || canal.readyState !== 'open') { DIAG.apres = 'connexion aux services perdue avant la réponse de l\'autre appareil'; echec(erreurSync('reseau')); } };
     nouvellePC();
     brancherCanal(pc.createDataChannel('carnet', {ordered:true}));
     await pc.setLocalDescription(await pc.createOffer());
@@ -2183,9 +2195,17 @@ function syncFini(b, appareil){
     <p class="sous" style="margin-top:12px">Les deux appareils ont maintenant exactement les mêmes fiches.</p></div>`, piedFermer(true));
   toast('Synchronisation terminée');
 }
+function detailReseau(){
+  const nom = k => NOMS_SERVICES[k] || k;
+  const lignes = Object.keys(DIAG.services).map(k => `${nom(k)} : ${DIAG.services[k]}`);
+  if (!DIAG.role && !lignes.length && !DIAG.apres) return '';
+  const debut = DIAG.role === 'invite' ? `Cet appareil scannait le QR code, qui indiquait : ${DIAG.liste.split('').map(nom).join(', ') || 'rien'}.` : (DIAG.role === 'hote' ? 'Cet appareil affichait le QR code.' : '');
+  return [debut, lignes.join(' ; '), DIAG.apres].filter(Boolean).join(' ');
+}
 function syncErreur(code, retour){
+  const detail = code === 'reseau' ? detailReseau() : '';
   ecranSynchro(`<div class="sync-centre"><div class="pastille-ok erreur">${ICONES.erreur}</div><h3 class="titre-bloc" style="margin:0 0 6px">La synchronisation n'a pas pu se faire</h3>
-    <p class="aide">${esc(MESSAGES_SYNC[code] || MESSAGES_SYNC.coupure)}</p></div>`,
+    <p class="aide">${esc(MESSAGES_SYNC[code] || MESSAGES_SYNC.coupure)}</p>${detail ? `<p class="sous" style="margin-top:10px">Détail technique : ${esc(detail)}</p>` : ''}</div>`,
     retour ? `<button type="button" class="btn discret" data-dlg="sync-retour">Réessayer</button>${piedFermer()}` : piedFermer());
 }
 async function annulerDerniereSynchro(){
