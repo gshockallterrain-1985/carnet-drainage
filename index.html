@@ -398,10 +398,12 @@ dialog::backdrop{background:rgba(12,28,28,.45)}
     <div class="pied">
       <p class="statut attente" id="statut">Chargement…</p>
       <p class="sous" id="sauvegardeInfo"></p>
+      <p class="sous" id="copieInfo"></p>
       <button class="btn large-btn btn-synchro" data-action="synchro" title="Synchroniser avec mon autre appareil"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6A5.5 5.5 0 0 0 3.2 4.3M2.5 10a5.5 5.5 0 0 0 10.3 1.7"/><path d="M3 1.8v2.7h2.7M13 14.2v-2.7h-2.7"/></svg>Synchroniser</button>
       <div class="actions">
         <button class="btn petit" data-action="exporter">Sauvegarder</button>
         <button class="btn petit" data-action="importer">Restaurer</button>
+        <button class="btn petit" data-action="copie" id="btnCopie" title="Copie automatique dans un fichier sur cet ordinateur" hidden>Copie auto</button>
         <button class="btn petit" data-action="reglages">Réglages</button>
         <button class="btn petit" data-action="installer" id="btnInstaller" hidden>Installer l'appli</button>
       </div>
@@ -662,6 +664,7 @@ async function ecrireMaintenant(){
   if (idb) { try { await idbEcrire(json); ok = true; } catch (e) {} }
   statutStockage = ok ? 'ok' : 'erreur';
   majPied();
+  planifierCopie();
   try { if (canalFenetres) canalFenetres.postMessage({type:'maj'}); } catch (e) {}
 }
 // Appli ouverte dans deux fenêtres (par exemple après le scan avec l'appareil photo) :
@@ -771,6 +774,7 @@ function majContenu(){
 function majEntete(c){ const t = $('#ficheTete'); if (t) t.innerHTML = htmlEntete(c); }
 
 function majPied(){
+  majCopie();
   const st = $('#statut');
   if (statutStockage === 'ok') { st.className = 'statut'; st.textContent = 'Enregistré sur cet appareil'; }
   else if (statutStockage === 'erreur') { st.className = 'statut erreur'; st.textContent = "Le navigateur bloque l'enregistrement : fais une sauvegarde maintenant."; }
@@ -807,7 +811,8 @@ function htmlAccueil(){
   ${!n ? `<section class="bloc vide"><h2 class="titre-bloc">Tu as déjà des fiches ?</h2>
     <p><strong>Elles sont sur ton autre appareil :</strong> touche « Synchroniser » pour les récupérer ici.</p>
     <p><strong>Elles sont dans l'ancien fichier carnet-drainage.html :</strong> ouvre-le, touche « Sauvegarder », puis reviens ici, touche « Restaurer » et choisis le fichier obtenu.</p>
-    <div class="actions"><button class="btn" data-action="synchro">Synchroniser</button><button class="btn" data-action="importer">Restaurer une sauvegarde</button></div></section>` : ''}
+    ${copiePossible ? '<p><strong>Elles sont dans le fichier de copie automatique de cet ordinateur :</strong> touche « Reprendre depuis la copie » et choisis le fichier.</p>' : ''}
+    <div class="actions"><button class="btn" data-action="synchro">Synchroniser</button><button class="btn" data-action="importer">Restaurer une sauvegarde</button>${copiePossible ? '<button class="btn" data-action="copie-reprendre">Reprendre depuis la copie</button>' : ''}</div></section>` : ''}
   ${doublons.length ? `<div class="alerte bloc"><strong>Factures en double après une synchronisation</strong><ul>${doublons.map(g => `<li>N° ${esc(g[0].numero)} : ${g.map(f => esc(f.client && f.client.nom || 'sans nom')).join(' et ')}</li>`).join('')}</ul><p>Ces factures ont été créées sur tes deux appareils avec le même numéro, et elles ont déjà été transmises : l'appli ne les renumérote donc pas. Pour éviter ce cas, synchronise avant de facturer sur l'autre appareil.</p></div>` : ''}
   ${rappel ? `<div class="alerte orange bloc"><strong>Pense à synchroniser ou à sauvegarder</strong><p>${protege ? `Tes fiches n'ont pas été copiées ailleurs depuis le ${fmtDate(protege.slice(0, 10))}.` : "Tes fiches n'existent pour l'instant que sur cet appareil."} Une synchronisation avec ton autre appareil, ou un fichier de sauvegarde, te permet de tout récupérer si cet appareil est perdu ou réinitialisé.</p><p class="actions"><button class="btn petit btn-plein" data-action="synchro">Synchroniser</button><button class="btn petit" data-action="exporter">Sauvegarder dans un fichier</button></p></div>` : ''}
   ${aVenir.length ? `<section class="bloc"><h2 class="titre-bloc">Prochaines séances conseillées</h2><ul class="liste-simple">${aVenir.map(x => `<li><a href="#/fiche/${x.c.id}/seances">${esc(nomComplet(x.c))}</a><span class="sous">${fmtDate(x.date)}</span></li>`).join('')}</ul></section>` : ''}
@@ -1678,6 +1683,162 @@ async function importer(fichier){
   } catch (e) { alert("Ce fichier n'est pas une sauvegarde du carnet de drainage. Choisis le fichier « carnet-drainage-sauvegarde-… .json »."); }
 }
 
+/* ---------- Copie automatique dans un fichier (Chrome et Edge sur ordinateur) ----------
+   Un fichier choisi une fois est mis à jour à chaque modification. Si le navigateur vide ses données,
+   les fiches se récupèrent depuis ce fichier. Le fichier reste sur l'ordinateur, rien n'est envoyé. */
+const COPIE_CLE = 'copie-auto';
+const COPIE_TYPES = [{description:'Copie du carnet de drainage', accept:{'application/json':['.json']}}];
+const copiePossible = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+const copie = { handle:null, nom:'', etat:'off', erreur:'', minuteur:null, enCours:false, repasser:false };
+const copieDroit = {mode:'readwrite'};
+const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
+
+async function copieLireFichier(h){
+  const f = await h.getFile();
+  if (!f.size) return null;
+  const obj = JSON.parse(await f.text());
+  return obj && Array.isArray(obj.clients) ? obj : null;
+}
+async function copieLier(h){
+  copie.handle = h; copie.nom = h.name; copie.etat = 'ok'; copie.erreur = '';
+  if (idb) { try { await idbEcrire(h, COPIE_CLE); } catch (e) {} }
+}
+async function copieInit(){
+  if (!copiePossible || !idb || copie.handle) { majCopie(); return; }
+  try {
+    const h = await idbLire(COPIE_CLE);
+    if (h && typeof h.queryPermission === 'function') {
+      copie.handle = h; copie.nom = h.name;
+      copie.etat = (await h.queryPermission(copieDroit)) === 'granted' ? 'ok' : 'permission';
+      // Carnet vide sur cet appareil alors qu'une copie existe : proposer de la reprendre
+      if (copie.etat === 'ok' && !etat.clients.length && !etat.factures.length) {
+        const obj = await copieLireFichier(h);
+        if (obj && obj.clients.length) {
+          const quand = obj.exporteLe ? ` du ${fmtDate(obj.exporteLe.slice(0, 10))}` : '';
+          if (confirm(`Les fiches ont disparu de cet appareil, mais la copie automatique en contient ${pluriel(obj.clients.length, 'fiche')}${quand}. Les restaurer ?`)) {
+            etat = migrer(normaliser(obj));
+            await ecrireMaintenant();
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  majCopie();
+}
+async function copieEcrire(){
+  if (!copie.handle) return;
+  if (copie.enCours) { copie.repasser = true; return; }
+  // Carnet vide : rien à protéger, et on ne remplace pas une copie existante par du vide
+  if (!etat.clients.length && !etat.factures.length) return;
+  copie.enCours = true;
+  try {
+    if ((await copie.handle.queryPermission(copieDroit)) !== 'granted') { copie.etat = 'permission'; return; }
+    const donnees = JSON.stringify({...etat, exporteLe:new Date().toISOString(), copieAuto:true}, null, 1);
+    const w = await copie.handle.createWritable();
+    await w.write(donnees);
+    await w.close();
+    copie.etat = 'ok'; copie.erreur = '';
+    etat.reglages.derniereSauvegarde = new Date().toISOString();
+  } catch (e) { copie.etat = 'erreur'; copie.erreur = (e && e.name) || 'erreur'; }
+  finally { copie.enCours = false; majPied(); if (copie.repasser) { copie.repasser = false; planifierCopie(); } }
+}
+function planifierCopie(){
+  if (!copie.handle) return;
+  clearTimeout(copie.minuteur);
+  copie.minuteur = setTimeout(() => { copie.minuteur = null; copieEcrire(); }, 3000);
+}
+function copieVider(){ if (copie.minuteur) { clearTimeout(copie.minuteur); copie.minuteur = null; copieEcrire(); } }
+window.addEventListener('pagehide', copieVider);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') copieVider(); });
+
+function majCopie(){
+  const b = $('#btnCopie'), i = $('#copieInfo');
+  if (!b || !i) return;
+  b.hidden = !copiePossible;
+  i.className = 'sous'; i.textContent = '';
+  if (!copiePossible || !copie.handle) return;
+  if (copie.etat === 'ok') i.textContent = `Copie automatique active : ${copie.nom}`;
+  else if (copie.etat === 'permission') { i.className = 'sous retard'; i.textContent = 'Copie automatique en pause : touche « Copie auto » pour la réactiver'; }
+  else { i.className = 'sous retard'; i.textContent = copie.erreur === 'NotFoundError' ? 'Copie automatique : fichier introuvable, choisis-en un autre (« Copie auto »)' : 'Copie automatique impossible : touche « Copie auto »'; }
+}
+function ouvrirCopie(){
+  const dlg = $('#dlg'); dlg.className = 'etroit';
+  const actif = !!copie.handle;
+  const nom = esc(copie.nom);
+  const situation = !actif ? 'Pas encore activée.'
+    : copie.etat === 'ok' ? `Active : chaque modification est recopiée dans « ${nom} ».`
+    : copie.etat === 'permission' ? `En pause : le navigateur demande de confirmer l'accès à « ${nom} ».`
+    : `Impossible d'écrire dans « ${nom} » (fichier déplacé ou supprimé ?).`;
+  dlg.innerHTML = `<header class="dlg-tete"><h2 id="dlgTitre">Copie automatique</h2><p class="sous">Un fichier sur cet ordinateur, mis à jour à chaque modification</p></header>
+    <div class="dlg-corps">
+      <p class="aide">Si le navigateur vide ses données, tes fiches restent dans ce fichier : « Reprendre depuis un fichier » les remet en place. Il contient des données de santé : choisis un dossier privé, pas un dossier partagé ni synchronisé en ligne.</p>
+      <p><strong>${situation}</strong></p>
+      <div class="actions bloc">
+        ${actif && copie.etat !== 'ok' ? '<button type="button" class="btn btn-plein" data-dlg="copie-reautoriser">Réactiver la copie</button>' : ''}
+        <button type="button" class="btn${actif ? '' : ' btn-plein'}" data-dlg="copie-nouveau">${actif ? 'Choisir un autre fichier' : 'Créer le fichier de copie'}</button>
+        <button type="button" class="btn" data-dlg="copie-reprendre">Reprendre depuis un fichier</button>
+        ${actif ? '<button type="button" class="btn danger" data-dlg="copie-arreter">Arrêter la copie</button>' : ''}
+      </div>
+    </div>
+    <footer class="dlg-pied">${piedFermer(true)}</footer>`;
+  ouvrirDialogue({
+    clic: b => {
+      const a = b.dataset.dlg;
+      if (a === 'copie-nouveau') copieNouveau();
+      else if (a === 'copie-reprendre') copieReprendre();
+      else if (a === 'copie-reautoriser') copieReautoriser();
+      else if (a === 'copie-arreter') copieArreter();
+    }
+  });
+}
+async function copieNouveau(){
+  let h;
+  try { h = await window.showSaveFilePicker({suggestedName:'carnet-drainage-copie-auto.json', types:COPIE_TYPES}); } catch (e) { return; }
+  try {
+    const obj = await copieLireFichier(h);
+    if (obj && obj.clients.length) {
+      if (!etat.clients.length) { alert(`Ce fichier contient déjà ${pluriel(obj.clients.length, 'fiche')}. Pour les récupérer ici, utilise « Reprendre depuis un fichier ».`); return; }
+      if (!confirm(`Ce fichier contient déjà ${pluriel(obj.clients.length, 'fiche')}. Le remplacer par les ${pluriel(etat.clients.length, 'fiche')} de cet appareil ?`)) return;
+    }
+  } catch (e) {}
+  await copieLier(h);
+  await copieEcrire();
+  fermerDialogue(); majPied();
+  toast(copie.etat === 'ok' ? `Copie automatique activée : ${copie.nom}` : 'Copie automatique choisie : elle démarrera avec la première fiche', 5000);
+}
+async function copieReprendre(){
+  let h;
+  try { [h] = await window.showOpenFilePicker({types:COPIE_TYPES, multiple:false}); } catch (e) { return; }
+  try {
+    if ((await h.requestPermission(copieDroit)) !== 'granted') { toast("Accès au fichier refusé : la copie automatique n'a pas été activée.", 6000); return; }
+    const obj = await copieLireFichier(h);
+    if (!obj) throw new Error('format');
+    const n = obj.clients.length;
+    const quand = obj.exporteLe ? ` du ${fmtDate(obj.exporteLe.slice(0, 10))}` : '';
+    if (etat.clients.length && !confirm(`Remplacer les ${pluriel(etat.clients.length, 'fiche')} actuelles par les ${pluriel(n, 'fiche')} de la copie${quand} ? Les données actuelles seront effacées.`)) return;
+    etat = migrer(normaliser(obj));
+    await ecrireMaintenant();
+    await copieLier(h);
+    await copieEcrire();
+    fermerDialogue(); location.hash = '#/'; render();
+    toast(`Copie reprise : ${pluriel(n, 'fiche')}. La copie automatique est active.`, 6000);
+  } catch (e) { alert("Ce fichier n'est pas une copie du carnet de drainage. Choisis le fichier « carnet-drainage-copie-auto.json » ou une sauvegarde « carnet-drainage-sauvegarde-… .json »."); }
+}
+async function copieReautoriser(){
+  if (!copie.handle) return;
+  try {
+    if ((await copie.handle.requestPermission(copieDroit)) === 'granted') { copie.etat = 'ok'; await copieEcrire(); toast('Copie automatique réactivée'); fermerDialogue(); }
+  } catch (e) { copie.etat = 'erreur'; copie.erreur = (e && e.name) || 'erreur'; }
+  majPied();
+}
+async function copieArreter(){
+  if (!confirm('Arrêter la copie automatique ? Le fichier est conservé tel quel, il ne sera plus mis à jour.')) return;
+  copie.handle = null; copie.nom = ''; copie.etat = 'off'; clearTimeout(copie.minuteur); copie.minuteur = null;
+  if (idb) { try { await idbEcrire(null, COPIE_CLE); } catch (e) {} }
+  fermerDialogue(); majPied();
+  toast('Copie automatique arrêtée');
+}
+
 /* =========================================================
    Synchronisation directe entre deux appareils
    ---------------------------------------------------------
@@ -2280,6 +2441,8 @@ document.addEventListener('click', e => {
     case 'exporter': exporter(); break;
     case 'importer': $('#fichierImport').value = ''; $('#fichierImport').click(); break;
     case 'reglages': ouvrirReglages(); break;
+    case 'copie': ouvrirCopie(); break;
+    case 'copie-reprendre': copieReprendre(); break;
     case 'synchro': ouvrirSynchro(null); break;
     case 'installer': installer(); break;
     case 'imprimer-fiche': if (c) imprimer(htmlImpFiche(c)); break;
@@ -2335,6 +2498,7 @@ document.addEventListener('submit', e => { if (e.target.id === 'formQuest') { e.
    ========================================================= */
 (async function demarrer(){
   await charger();
+  await copieInit();
   route();
   if (statutStockage === 'erreur') toast("Ce navigateur bloque l'enregistrement (navigation privée ?). Tes saisies seront perdues à la fermeture.", 9000);
 })();
