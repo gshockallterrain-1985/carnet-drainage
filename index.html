@@ -574,7 +574,7 @@ const MODELES = { [ANCIEN.id]:ANCIEN, [CORALYS.id]:CORALYS };
 const MODELE = CORALYS;
 // Modèle d'un questionnaire (celui des nouveaux questionnaires si aucun n'est donné)
 const modeleDe = q => !q ? MODELE : (MODELES[q.modeleId] || { id:q.modeleId, court:'', nom:q.modeleNom || 'Questionnaire', enTete:'Questionnaire de santé', titre:'Questionnaire', sousTitre:'', intro:'', libelleDate:'Date', identite:ANCIEN.identite });
-const TEXTE_RGPD = "J'accepte que mes informations personnelles et de santé soient conservées par le praticien, uniquement pour le suivi de mes séances. Je peux demander à les consulter, les corriger ou les supprimer à tout moment.";
+const TEXTE_RGPD = "J'ai reçu l'information sur l'utilisation de mes données et je consens explicitement à ce que mes informations de santé soient conservées par le praticien, uniquement pour le suivi de mes séances, pendant 5 ans après ma dernière séance. Je peux retirer mon accord, ou demander l'accès, la correction ou la suppression de mes données, à tout moment.";
 
 const TYPES = ['Drainage lymphatique complet', 'Drainage tonique', 'Drainage des jambes'];
 const PRESSIONS = ['Légère', 'Moyenne', 'Soutenue'];
