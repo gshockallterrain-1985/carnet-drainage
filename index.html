@@ -115,7 +115,7 @@ p{margin:0 0 10px}
 .liens-contact{display:flex;gap:12px}
 .liens-contact a{text-decoration:none;font-weight:600}
 .liens-contact a:hover{text-decoration:underline}
-input[type=text],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=search],select,textarea{font:inherit;color:inherit;background:var(--papier);border:1px solid var(--trait);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+input[type=text],input[type=tel],input[type=email],input[type=date],input[type=time],input[type=search],input[type=password],select,textarea{font:inherit;color:inherit;background:var(--papier);border:1px solid var(--trait);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
 input::placeholder,textarea::placeholder{color:var(--encre-3)}
 textarea{min-height:72px;resize:vertical;line-height:1.45}
 input:hover,select:hover,textarea:hover{border-color:var(--zone-trait)}
@@ -289,6 +289,14 @@ dialog::backdrop{background:rgba(12,28,28,.45)}
 .dlg-corps{padding:18px 24px 6px}
 .dlg-pied{position:sticky;bottom:0;z-index:3;background:var(--papier);padding:12px 24px;border-top:1px solid var(--trait);display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
 .dlg-pied .espace{flex:1}
+/* Écran de verrouillage : plein écran, au-dessus de tout (y compris des fenêtres déjà ouvertes) */
+dialog#verrou{position:fixed;inset:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;box-shadow:none;background:var(--fond);padding:24px}
+dialog#verrou[open]{display:flex;flex-direction:column;align-items:center;justify-content:center}
+dialog#verrou::backdrop{background:var(--fond)}
+dialog#verrou > form{flex:0 1 auto;width:min(420px,100%)}
+.verrou-carte{background:var(--papier);border:1px solid var(--trait);border-radius:12px;padding:28px 24px}
+.verrou-carte h2{font-family:var(--serif);font-weight:normal;font-size:26px;margin-bottom:6px}
+.verrou-carte .actions{margin-top:16px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);background:var(--encre);color:var(--papier);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100vw - 32px);z-index:10}
 .toast.visible{opacity:1;transform:translate(-50%,0)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -405,6 +413,8 @@ dialog::backdrop{background:rgba(12,28,28,.45)}
         <button class="btn petit" data-action="importer">Restaurer</button>
         <button class="btn petit" data-action="copie" id="btnCopie" title="Copie automatique dans un fichier sur cet ordinateur" hidden>Copie auto</button>
         <button class="btn petit" data-action="reglages">Réglages</button>
+        <button class="btn petit" data-action="verrou" title="Mot de passe pour ouvrir le carnet">Mot de passe</button>
+        <button class="btn petit" data-action="verrouiller" id="btnVerrouiller" title="Verrouiller le carnet maintenant" hidden>Verrouiller</button>
         <button class="btn petit" data-action="installer" id="btnInstaller" hidden>Installer l'appli</button>
       </div>
       <input type="file" id="fichierImport" accept=".json,application/json" hidden>
@@ -413,6 +423,7 @@ dialog::backdrop{background:rgba(12,28,28,.45)}
   <main class="principal" id="principal" tabindex="-1"></main>
 </div>
 <dialog id="dlg" aria-labelledby="dlgTitre"></dialog>
+<dialog id="verrou" aria-labelledby="verrouTitre"></dialog>
 <div id="impression" aria-hidden="true"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -672,7 +683,7 @@ async function ecrireMaintenant(){
 let canalFenetres = null, aRecharger = false;
 try { canalFenetres = new BroadcastChannel('carnet-drainage'); canalFenetres.onmessage = e => { if (e.data && e.data.type === 'maj') autreFenetre(); }; } catch (e) {}
 function autreFenetre(){ if ($('#dlg').open || minuteur) { aRecharger = true; return; } relire(); }
-async function relire(){ aRecharger = false; await charger(); render(); }
+async function relire(){ if (!verrou.ouvert) { aRecharger = true; return; } aRecharger = false; await charger(); render(); }
 function relireSiBesoin(){ if (aRecharger) setTimeout(() => { if (aRecharger && !$('#dlg').open && !minuteur) relire(); }, 60); }
 function viderEnAttente(){ if (minuteur) { clearTimeout(minuteur); minuteur = null; etat.enregistreLe = new Date().toISOString(); const json = JSON.stringify(etat); try { if (lsDispo) localStorage.setItem(CLE_LS, json); } catch (e) {} if (idb) idbEcrire(json).catch(() => {}); } }
 window.addEventListener('pagehide', viderEnAttente);
@@ -2441,6 +2452,8 @@ document.addEventListener('click', e => {
     case 'exporter': exporter(); break;
     case 'importer': $('#fichierImport').value = ''; $('#fichierImport').click(); break;
     case 'reglages': ouvrirReglages(); break;
+    case 'verrou': ouvrirVerrou(); break;
+    case 'verrouiller': verrouiller(); break;
     case 'copie': ouvrirCopie(); break;
     case 'copie-reprendre': copieReprendre(); break;
     case 'synchro': ouvrirSynchro(null); break;
@@ -2494,10 +2507,190 @@ document.addEventListener('change', e => {
 document.addEventListener('submit', e => { if (e.target.id === 'formQuest') { e.preventDefault(); enregistrerQuestionnaire(e.target); } });
 
 /* =========================================================
+   Verrouillage par mot de passe
+   ---------------------------------------------------------
+   Le mot de passe n'est jamais enregistré : une empreinte (PBKDF2-SHA-256 avec un sel aléatoire)
+   sert seulement à le vérifier. Le verrou est propre à chaque appareil : il n'est ni dans les
+   sauvegardes ni dans la synchronisation. Il protège l'ouverture de l'appli (écran de verrouillage
+   au lancement, puis après une période sans utilisation) mais ne chiffre pas les fiches : pour
+   cela, le chiffrement du disque de l'appareil.
+   ========================================================= */
+const CLE_VERROU = 'verrou', CLE_LS_VERROU = 'carnet-drainage-verrou';
+const VERROU_MIN = 12, VERROU_ITER = 600000;
+const VERROU_INACTIVITE_MS = 10 * 60 * 1000, VERROU_ABSENCE_MS = 3 * 60 * 1000;
+const verrou = { config:null, ouvert:true, dernierActe:Date.now(), masqueLe:0, echecs:0, enCours:false, surOuverture:null };
+const verrouDispo = () => !!(window.crypto && crypto.subtle);
+const verrouB64 = u => btoa(String.fromCharCode(...u));
+const verrouDepuisB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function verrouEmpreinte(mdp, sel, iter){
+  const cle = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(mdp).normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt:sel, iterations:iter}, cle, 256));
+}
+function verrouEgal(a, b){ if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i]; return d === 0; }
+async function verrouTenter(mdp){
+  const c = verrou.config; if (!c) return false;
+  const h = await verrouEmpreinte(mdp, verrouDepuisB64(c.sel), c.iter || VERROU_ITER);
+  return verrouEgal(h, verrouDepuisB64(c.hash));
+}
+function idbSupprimer(cle){ return new Promise((res, rej) => { const t = idb.transaction(MAGASIN, 'readwrite'); t.objectStore(MAGASIN).delete(cle); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
+function idbToutEffacer(){ return new Promise((res, rej) => { const t = idb.transaction(MAGASIN, 'readwrite'); t.objectStore(MAGASIN).clear(); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
+
+async function verrouLireConfig(){
+  let v = null;
+  try { v = localStorage.getItem(CLE_LS_VERROU); } catch (e) {}
+  if (!v && idb) { try { v = await idbLire(CLE_VERROU); } catch (e) {} }
+  if (!v) return null;
+  try { const c = JSON.parse(v); return c && c.sel && c.hash ? c : null; } catch (e) { return null; }
+}
+// Écrit (ou efface, avec null) la configuration aux deux endroits, puis relit pour s'assurer du résultat
+async function verrouEcrireConfig(c){
+  const json = c ? JSON.stringify(c) : null;
+  try { if (json) localStorage.setItem(CLE_LS_VERROU, json); else localStorage.removeItem(CLE_LS_VERROU); } catch (e) {}
+  if (idb) { try { if (json) await idbEcrire(json, CLE_VERROU); else await idbSupprimer(CLE_VERROU); } catch (e) {} }
+  const relu = await verrouLireConfig();
+  return c ? !!relu : !relu;
+}
+async function verrouDefinir(mdp){
+  const sel = aleatoire(16);
+  const hash = await verrouEmpreinte(mdp, sel, VERROU_ITER);
+  const config = { v:1, sel:verrouB64(sel), iter:VERROU_ITER, hash:verrouB64(hash), creeLe:new Date().toISOString() };
+  if (!(await verrouEcrireConfig(config))) throw new Error('stockage');
+  verrou.config = config; verrou.ouvert = true; verrou.dernierActe = Date.now();
+}
+function verrouMajBouton(){ const b = $('#btnVerrouiller'); if (b) b.hidden = !verrou.config; }
+
+function verrouAfficher(){
+  const d = $('#verrou');
+  d.innerHTML = `<form id="formDeverrou" novalidate autocomplete="off"><div class="verrou-carte">
+    <h2 id="verrouTitre">Carnet de drainage</h2>
+    <p class="aide">Saisis ton mot de passe pour ouvrir le carnet.</p>
+    <div class="champ" style="margin-top:14px"><label for="vd-mdp">Mot de passe</label><input type="password" id="vd-mdp" name="mdp" autocomplete="current-password"></div>
+    <p class="erreur-form" id="verrouErreur" role="alert" hidden></p>
+    <div class="actions"><button type="submit" class="btn btn-plein">Ouvrir</button><button type="button" class="btn discret" id="verrouOubli">Mot de passe oublié ?</button></div>
+  </div></form>`;
+  if (!d.open) d.showModal();
+  setTimeout(() => { const i = $('#vd-mdp'); if (i) i.focus(); }, 30);
+}
+async function verrouEssai(){
+  if (verrou.enCours) return;
+  const champ = $('#vd-mdp'), err = $('#verrouErreur'), bouton = $('#formDeverrou button[type=submit]');
+  if (!champ || !champ.value) return;
+  verrou.enCours = true; bouton.disabled = true;
+  let bon = false;
+  try { bon = await verrouTenter(champ.value); }
+  catch (e) { err.textContent = "Ce navigateur ne permet pas de vérifier le mot de passe."; err.hidden = false; verrou.enCours = false; bouton.disabled = false; return; }
+  if (bon) { verrou.enCours = false; verrouOuvrir(); return; }
+  verrou.echecs++;
+  err.textContent = 'Mot de passe incorrect.'; err.hidden = false; champ.value = '';
+  // Pause qui s'allonge à chaque erreur (jusqu'à 10 secondes)
+  await new Promise(r => setTimeout(r, Math.min(verrou.echecs, 10) * 1000));
+  verrou.enCours = false; bouton.disabled = false; champ.focus();
+}
+function verrouOuvrir(){
+  verrou.ouvert = true; verrou.echecs = 0; verrou.dernierActe = Date.now();
+  const d = $('#verrou'); if (d.open) d.close(); d.innerHTML = '';
+  const suite = verrou.surOuverture; verrou.surOuverture = null;
+  if (suite) suite(); else if (aRecharger) relire();
+}
+function verrouiller(){
+  if (!verrou.config || !verrou.ouvert) return;
+  verrou.ouvert = false; verrou.echecs = 0;
+  verrouAfficher();
+}
+// Mot de passe oublié : on efface les fiches ET le verrou de cet appareil (rien n'est lisible sans le mot de passe),
+// puis on les remet depuis une sauvegarde. Le lien vers le fichier de copie automatique est lui aussi effacé.
+async function verrouOubli(){
+  if (!confirm("Effacer le mot de passe ET toutes les fiches de cet appareil ?\n\nTu pourras les remettre depuis une sauvegarde (« Restaurer ») ou depuis le fichier de la copie automatique (« Reprendre depuis un fichier »). Sans sauvegarde, elles seront perdues.")) return;
+  try { localStorage.removeItem(CLE_LS); localStorage.removeItem(CLE_LS_VERROU); } catch (e) {}
+  if (idb) { try { await idbToutEffacer(); } catch (e) {} }
+  etat = etatVide(); verrou.config = null;
+  copie.handle = null; copie.nom = ''; copie.etat = 'off';
+  verrouMajBouton(); verrouOuvrir(); render();
+  toast('Mot de passe et fiches effacés de cet appareil', 6000);
+}
+async function verrouInit(){
+  verrou.config = await verrouLireConfig();
+  verrouMajBouton();
+  if (!verrou.config) return;
+  verrou.ouvert = false;
+  await new Promise(res => { verrou.surOuverture = res; verrouAfficher(); });
+}
+
+function ouvrirVerrou(){
+  if (!verrouDispo()) { toast("Le mot de passe n'est pas disponible dans ce navigateur.", 6000); return; }
+  const actif = !!verrou.config;
+  const dlg = $('#dlg'); dlg.className = 'etroit';
+  dlg.innerHTML = `<form id="formVerrou" novalidate autocomplete="off">
+  <header class="dlg-tete"><h2 id="dlgTitre">Mot de passe</h2><p class="sous">${actif ? 'Actif : le carnet se verrouille après 10 minutes sans utilisation' : "Pas encore activé : le carnet s'ouvre directement"}</p></header>
+  <div class="dlg-corps">
+    <p class="aide">Il protège l'ouverture du carnet sur cet appareil, mais pas les sauvegardes ni ton autre appareil. Choisis au moins ${VERROU_MIN} caractères : une phrase est plus sûre et plus facile à retenir. Il ne peut pas être retrouvé s'il est oublié.</p>
+    <div class="grille" style="margin-top:14px">
+      ${actif ? '<div class="champ large"><label for="vf-actuel">Mot de passe actuel</label><input type="password" id="vf-actuel" name="actuel" autocomplete="current-password"></div>' : ''}
+      <div class="champ large"><label for="vf-nouveau">${actif ? 'Nouveau mot de passe' : 'Mot de passe'}</label><input type="password" id="vf-nouveau" name="nouveau" autocomplete="new-password"></div>
+      <div class="champ large"><label for="vf-confirm">Confirmer</label><input type="password" id="vf-confirm" name="confirm" autocomplete="new-password"></div>
+    </div>
+    <p class="erreur-form" id="verrouFormErreur" hidden></p>
+  </div>
+  <footer class="dlg-pied">${actif ? '<button type="button" class="btn danger" data-dlg="verrou-retirer">Retirer le mot de passe</button>' : ''}<span class="espace"></span><button type="button" class="btn" data-dlg="fermer">Annuler</button><button type="submit" class="btn btn-plein">${actif ? 'Changer' : 'Activer'}</button></footer></form>`;
+  const form = $('#formVerrou');
+  const erreur = m => { const e = $('#verrouFormErreur'); if (e) { e.textContent = m; e.hidden = false; } };
+  const occupe = on => $$('button, input', form).forEach(x => { x.disabled = on; });
+  ouvrirDialogue({
+    sale:false,
+    submit: async () => {
+      const fd = new FormData(form);
+      const actuel = String(fd.get('actuel') || ''), nouveau = String(fd.get('nouveau') || ''), confirmation = String(fd.get('confirm') || '');
+      occupe(true);
+      try {
+        if (actif && !(await verrouTenter(actuel))) { erreur('Le mot de passe actuel est incorrect.'); return; }
+        if (nouveau.length < VERROU_MIN) { erreur(`Le nouveau mot de passe doit faire au moins ${VERROU_MIN} caractères.`); return; }
+        if (nouveau !== confirmation) { erreur('Les deux saisies ne sont pas identiques.'); return; }
+        await verrouDefinir(nouveau);
+        fermerDialogue(); verrouMajBouton();
+        toast(actif ? 'Mot de passe changé' : 'Mot de passe activé : le carnet se verrouillera au prochain lancement et après 10 minutes sans utilisation', 6000);
+      } catch (e) { erreur("Impossible d'enregistrer le mot de passe : le navigateur bloque l'enregistrement."); }
+      finally { occupe(false); }
+    },
+    clic: async b => {
+      if (b.dataset.dlg !== 'verrou-retirer') return;
+      occupe(true);
+      try {
+        if (!(await verrouTenter($('#vf-actuel').value))) { erreur('Saisis le mot de passe actuel pour pouvoir le retirer.'); return; }
+        if (!confirm("Retirer le mot de passe ? Le carnet s'ouvrira directement sur cet appareil.")) return;
+        if (!(await verrouEcrireConfig(null))) { erreur("Impossible de retirer le mot de passe : le navigateur bloque l'enregistrement."); return; }
+        verrou.config = null; verrouMajBouton(); fermerDialogue(); toast('Mot de passe retiré');
+      } catch (e) { erreur("Le mot de passe n'a pas pu être vérifié."); }
+      finally { occupe(false); }
+    }
+  });
+  setTimeout(() => { const i = $(actif ? '#vf-actuel' : '#vf-nouveau'); if (i) i.focus(); }, 30);
+}
+
+(function(){
+  const d = $('#verrou');
+  d.addEventListener('cancel', e => e.preventDefault());
+  // Échap deux fois de suite peut fermer une fenêtre malgré tout : tant que le carnet est verrouillé, on la rouvre
+  d.addEventListener('close', () => { if (!verrou.ouvert) setTimeout(verrouAfficher, 0); });
+  d.addEventListener('submit', e => { e.preventDefault(); verrouEssai(); });
+  d.addEventListener('click', e => { if (e.target.closest('#verrouOubli')) verrouOubli(); });
+  const marquer = () => { if (verrou.ouvert) verrou.dernierActe = Date.now(); };
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(t => document.addEventListener(t, marquer, {capture:true, passive:true}));
+  const verifier = () => { if (verrou.config && verrou.ouvert && Date.now() - verrou.dernierActe > VERROU_INACTIVITE_MS) verrouiller(); };
+  setInterval(verifier, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { verrou.masqueLe = Date.now(); return; }
+    const absent = verrou.masqueLe ? Date.now() - verrou.masqueLe : 0; verrou.masqueLe = 0;
+    if (verrou.config && verrou.ouvert && absent > VERROU_ABSENCE_MS) verrouiller(); else verifier();
+  });
+})();
+
+/* =========================================================
    Démarrage
    ========================================================= */
 (async function demarrer(){
   await charger();
+  await verrouInit();
   await copieInit();
   route();
   if (statutStockage === 'erreur') toast("Ce navigateur bloque l'enregistrement (navigation privée ?). Tes saisies seront perdues à la fermeture.", 9000);
