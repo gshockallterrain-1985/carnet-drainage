@@ -1672,13 +1672,29 @@ function imprimer(html){ const z = $('#impression'); z.innerHTML = html; z.remov
 window.addEventListener('afterprint', () => { const z = $('#impression'); z.innerHTML = ''; z.setAttribute('aria-hidden', 'true'); });
 
 /* ---------- Sauvegarde et restauration ---------- */
-function exporter(){
+async function exporter(){
   const donnees = JSON.stringify({...etat, exporteLe:new Date().toISOString()}, null, 1);
-  telecharger(new Blob([donnees], {type:'application/json'}), `carnet-drainage-sauvegarde-${aujourdhui()}.json`);
+  const nom = `carnet-drainage-sauvegarde-${aujourdhui()}.json`;
+  let ou = '';
+  // Chrome et Edge sur ordinateur : on choisit le dossier (par exemple un volume chiffré VeraCrypt).
+  // Le navigateur se souvient du dernier dossier choisi. Ailleurs : téléchargement classique.
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const h = await window.showSaveFilePicker({suggestedName:nom, id:'carnet-sauvegarde', types:COPIE_TYPES});
+      const w = await h.createWritable();
+      await w.write(donnees);
+      await w.close();
+      ou = h.name;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;   // choix annulé : rien n'est sauvegardé
+      ou = '';                                   // échec d'écriture : repli sur le téléchargement
+    }
+  }
+  if (!ou) telecharger(new Blob([donnees], {type:'application/json'}), nom);
   etat.reglages.derniereSauvegarde = new Date().toISOString();
   enregistrer(false); majPied();
   if (!ui.clientId) renderPrincipal();
-  toast('Sauvegarde téléchargée : range ce fichier dans un endroit sûr, il contient des données de santé.', 6000);
+  toast(ou ? `Sauvegarde enregistrée : ${ou}. Elle contient des données de santé : garde-la dans un endroit chiffré.` : 'Sauvegarde téléchargée : range ce fichier dans un endroit sûr, il contient des données de santé.', 6000);
 }
 async function importer(fichier){
   try {
@@ -1782,7 +1798,7 @@ function ouvrirCopie(){
     : `Impossible d'écrire dans « ${nom} » (fichier déplacé ou supprimé ?).`;
   dlg.innerHTML = `<header class="dlg-tete"><h2 id="dlgTitre">Copie automatique</h2><p class="sous">Un fichier sur cet ordinateur, mis à jour à chaque modification</p></header>
     <div class="dlg-corps">
-      <p class="aide">Si le navigateur vide ses données, tes fiches restent dans ce fichier : « Reprendre depuis un fichier » les remet en place. Il contient des données de santé : choisis un dossier privé, pas un dossier partagé ni synchronisé en ligne.</p>
+      <p class="aide">Si le navigateur vide ses données, tes fiches restent dans ce fichier : « Reprendre depuis un fichier » les remet en place. Il contient des données de santé : choisis un dossier privé, pas un dossier partagé ni synchronisé en ligne. Un volume chiffré (VeraCrypt) convient très bien : la copie se met en pause tant qu'il n'est pas monté, puis « Réactiver la copie » la relance.</p>
       <p><strong>${situation}</strong></p>
       <div class="actions bloc">
         ${actif && copie.etat !== 'ok' ? '<button type="button" class="btn btn-plein" data-dlg="copie-reautoriser">Réactiver la copie</button>' : ''}
@@ -1804,7 +1820,7 @@ function ouvrirCopie(){
 }
 async function copieNouveau(){
   let h;
-  try { h = await window.showSaveFilePicker({suggestedName:'carnet-drainage-copie-auto.json', types:COPIE_TYPES}); } catch (e) { return; }
+  try { h = await window.showSaveFilePicker({suggestedName:'carnet-drainage-copie-auto.json', id:'carnet-copie', types:COPIE_TYPES}); } catch (e) { return; }
   try {
     const obj = await copieLireFichier(h);
     if (obj && obj.clients.length) {
@@ -1819,7 +1835,7 @@ async function copieNouveau(){
 }
 async function copieReprendre(){
   let h;
-  try { [h] = await window.showOpenFilePicker({types:COPIE_TYPES, multiple:false}); } catch (e) { return; }
+  try { [h] = await window.showOpenFilePicker({id:'carnet-copie', types:COPIE_TYPES, multiple:false}); } catch (e) { return; }
   try {
     if ((await h.requestPermission(copieDroit)) !== 'granted') { toast("Accès au fichier refusé : la copie automatique n'a pas été activée.", 6000); return; }
     const obj = await copieLireFichier(h);
