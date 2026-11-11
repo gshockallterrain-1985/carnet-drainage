@@ -460,7 +460,7 @@ const SUR_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 // Sur ordinateur : ouvre directement la rédaction Gmail (au lieu du logiciel de messagerie par défaut, Outlook). Sur téléphone : l'appli de messagerie (Gmail).
 function mailLien(e, sujet, corps){
   const a = String(e || '').trim(), txt = corps ? corps.replace(/\r?\n/g, '\r\n') : '';
-  if (!SUR_MOBILE) { let u = 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(a); if (sujet) u += '&su=' + encodeURIComponent(sujet); if (txt) u += '&body=' + encodeURIComponent(txt); return u; }
+  if (!SUR_MOBILE) { let cpt = ''; try { cpt = String(etat.reglages.compteGmail || '').trim(); } catch (err) {} let u = 'https://mail.google.com/mail/?' + (cpt ? 'authuser=' + encodeURIComponent(cpt) + '&' : '') + 'view=cm&fs=1&to=' + encodeURIComponent(a); if (sujet) u += '&su=' + encodeURIComponent(sujet); if (txt) u += '&body=' + encodeURIComponent(txt); return u; }
   const q = []; if (sujet) q.push('subject=' + encodeURIComponent(sujet)); if (txt) q.push('body=' + encodeURIComponent(txt)); return 'mailto:' + a + (q.length ? '?' + q.join('&') : '');
 }
 const MAIL_CIBLE = SUR_MOBILE ? '' : ' target="_blank" rel="noopener"';
@@ -620,7 +620,7 @@ function etatVide(){
   return { application:'carnet-drainage', version:2, clients:[], questionnaires:[], seances:[], factures:[],
     supprimes:{clients:{}, questionnaires:{}, seances:{}, factures:{}},
     reglages:{ emetteur:{nom:'', commercial:'', adresse:'', siret:'', tel:'', email:'', tva:TVA_DEFAUT, assurance:''},
-      tarifs: TYPES.map(t => ({id:uid(), designation:t, prix:null})), signature:'', majLe:null,
+      tarifs: TYPES.map(t => ({id:uid(), designation:t, prix:null})), signature:'', compteGmail:'', majLe:null,
       derniereSauvegarde:null, derniereModif:null, derniereSynchro:null, synchroAvec:'' },
     enregistreLe:null };
 }
@@ -1550,6 +1550,7 @@ function ouvrirReglages(){
     </fieldset>
     <fieldset><legend>Messages</legend>
       <div class="champ" style="max-width:360px"><label for="r-signature">Signature des e-mails et SMS</label><input type="text" id="r-signature" name="signature" value="${esc(r.signature || '')}" placeholder="Par défaut, ton prénom et ton nom"></div>
+      <div class="champ" style="max-width:360px;margin-top:10px"><label for="r-compteGmail">Compte Gmail utilisé pour écrire (sur ordinateur)</label><input type="email" id="r-compteGmail" name="compteGmail" value="${esc(r.compteGmail || '')}" placeholder="prenom.nom@gmail.com"><p class="aide">Les e-mails s'ouvrent dans ce compte Gmail. Vide : le premier compte connecté dans le navigateur.</p></div>
     </fieldset>
   </div>
   <footer class="dlg-pied"><span class="espace"></span><button type="button" class="btn" data-dlg="fermer">Annuler</button><button type="submit" class="btn btn-plein">Enregistrer les réglages</button></footer></form>`;
@@ -1561,6 +1562,7 @@ function ouvrirReglages(){
       for (const k of ['nom','commercial','adresse','siret','tel','email','assurance','tva']) e[k] = String(fd.get(k) || '').trim();
       if (!e.tva) e.tva = TVA_DEFAUT;
       r.signature = String(fd.get('signature') || '').trim();
+      r.compteGmail = String(fd.get('compteGmail') || '').trim();
       r.majLe = new Date().toISOString();
       r.tarifs = $$('#tarifsLignes tr').map(tr => ({id:uid(), designation:$('[name=tDesignation]', tr).value.trim(), prix:num($('[name=tPrix]', tr).value)})).filter(t => t.designation);
       enregistrer(); fermerDialogue(); render(); toast('Réglages enregistrés');
