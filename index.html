@@ -456,7 +456,15 @@ function tronquer(s, n){ s = String(s || ''); return s.length > n ? s.slice(0, n
 const telBrut = t => String(t || '').replace(/[^\d+]/g, '');
 const telLien = t => 'tel:' + telBrut(t);
 const smsLien = (t, corps) => 'sms:' + telBrut(t) + (corps ? '?&body=' + encodeURIComponent(corps) : '');
-function mailLien(e, sujet, corps){ const q = []; if (sujet) q.push('subject=' + encodeURIComponent(sujet)); if (corps) q.push('body=' + encodeURIComponent(corps.replace(/\r?\n/g, '\r\n'))); return 'mailto:' + String(e || '').trim() + (q.length ? '?' + q.join('&') : ''); }
+const SUR_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+// Sur ordinateur : ouvre directement la rédaction Gmail (au lieu du logiciel de messagerie par défaut, Outlook). Sur téléphone : l'appli de messagerie (Gmail).
+function mailLien(e, sujet, corps){
+  const a = String(e || '').trim(), txt = corps ? corps.replace(/\r?\n/g, '\r\n') : '';
+  if (!SUR_MOBILE) { let u = 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(a); if (sujet) u += '&su=' + encodeURIComponent(sujet); if (txt) u += '&body=' + encodeURIComponent(txt); return u; }
+  const q = []; if (sujet) q.push('subject=' + encodeURIComponent(sujet)); if (txt) q.push('body=' + encodeURIComponent(txt)); return 'mailto:' + a + (q.length ? '?' + q.join('&') : '');
+}
+const MAIL_CIBLE = SUR_MOBILE ? '' : ' target="_blank" rel="noopener"';
+function ouvrirMail(url){ if (SUR_MOBILE) location.href = url; else window.open(url, '_blank', 'noopener'); }
 
 /* =========================================================
    Référentiels
@@ -855,7 +863,7 @@ function htmlEntete(c){
   if (a !== null) meta.push(`<span>${a} ans</span>`);
   if (c.pronoms && c.pronoms.trim()) meta.push(`<span>${esc(c.pronoms.trim())}</span>`);
   if (c.tel) meta.push(`<span><a href="${telLien(c.tel)}" title="Appeler">${esc(c.tel)}</a></span>`);
-  if (c.email) meta.push(`<span><a href="${esc(mailLien(c.email))}" title="Écrire un e-mail">${esc(c.email)}</a></span>`);
+  if (c.email) meta.push(`<span><a href="${esc(mailLien(c.email))}"${MAIL_CIBLE} title="Écrire un e-mail">${esc(c.email)}</a></span>`);
   if (c.ville) meta.push(`<span>${esc(c.ville)}</span>`);
   if (ss.length) meta.push(`<span>Première séance le ${fmtDate(ss[ss.length - 1].date)}</span>`);
   return `<a class="btn discret retour" href="#/">Retour aux fiches</a>
@@ -895,7 +903,7 @@ function liensContact(k, v){
   if (!v) return '';
   if (k === 'tel') return `<a href="${telLien(v)}">Appeler</a><a href="${smsLien(v)}">SMS</a>`;
   if (k === 'urgenceTel') return `<a href="${telLien(v)}">Appeler</a>`;
-  if (k === 'email') return `<a href="${esc(mailLien(v))}">Écrire</a>`;
+  if (k === 'email') return `<a href="${esc(mailLien(v))}"${MAIL_CIBLE}>Écrire</a>`;
   return '';
 }
 function htmlIdentite(c){
@@ -1435,7 +1443,7 @@ async function envoyerFacture(action, c, f){
     catch (e) { if (e && e.name !== 'AbortError') toast('Le partage a échoué : télécharge le PDF à la place.'); }
     return;
   }
-  if (action === 'envoi-mail') { telecharger(blob, nom); const m = texteMail(c, f); setTimeout(() => { location.href = mailLien(c.email, m.sujet, m.corps); }, 400); noter('mail'); toast(`PDF téléchargé (${nom}) : joins-le au message avant d'envoyer.`, 7000); return; }
+  if (action === 'envoi-mail') { telecharger(blob, nom); const m = texteMail(c, f); setTimeout(() => { ouvrirMail(mailLien(c.email, m.sujet, m.corps)); }, 400); noter('mail'); toast(`PDF téléchargé (${nom}) : joins-le au message avant d'envoyer.`, 7000); return; }
   if (action === 'envoi-sms') { location.href = smsLien(c.tel, texteSMS(c, f)); noter('sms'); toast('Message préparé dans ton application SMS'); }
 }
 function telecharger(blob, nom){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nom; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
