@@ -1456,8 +1456,17 @@ const WIN = {0x20AC:0x80,0x201A:0x82,0x201E:0x84,0x2026:0x85,0x2030:0x89,0x0160:
 function largeurTexte(s, taille, gras){ const t = gras ? HB : HR; let w = 0; for (const ch of String(s)) { if (SPECIAUX[ch]) { w += SPECIAUX[ch]; continue; } const b = ch.normalize('NFD')[0].charCodeAt(0); w += b >= 32 && b < 127 ? t[b - 32] : 556; } return w * taille / 1000; }
 function encPDF(s){ let o = ''; for (const ch of String(s)) { let c = ch.codePointAt(0); if (c === 0x202F || c === 0x2009) c = 0xA0; if (!((c >= 0x20 && c < 0x7F) || (c >= 0xA0 && c <= 0xFF))) c = WIN[c] || 0x3F; let x = String.fromCharCode(c); if (x === '\\' || x === '(' || x === ')') x = '\\' + x; o += x; } return o; }
 function couperTexte(s, maxW, taille, gras){ const mots = String(s || '').split(/\s+/).filter(Boolean); const lignes = []; let l = ''; for (const m of mots) { const essai = l ? l + ' ' + m : m; if (largeurTexte(essai, taille, gras) > maxW && l) { lignes.push(l); l = m; } else l = essai; } if (l) lignes.push(l); return lignes.length ? lignes : ['']; }
+/* Logo : phi d'un seul trait (C, boucle, J). Coordonnées du dessin d'origine, trait de 16, cadre 42..258 x 42..448 */
+const LOGO = {depart:[207.36,68.08], traits:[[170.95,42.59,122.07,44.19,87.41,72.01],[52.74,99.83,40.6,147.2,57.61,188.27],[74.62,229.34,116.7,254.24,160.89,249.41],[205.07,244.57,240.76,211.14,248.48,167.36],[250.78,154.33,245.53,141.12,234.91,133.21],[224.3,125.31,210.13,124.07,198.3,130.01],[186.48,135.95,179.01,148.05,179.01,161.29],[179.01,375],[179.01,404.42,159.25,430.17,130.84,437.79],[102.42,445.4,72.43,432.98,57.72,407.5]]};
+const CUIVRE = [[0.431,0.196,0.09],[0.722,0.412,0.227],[0.949,0.722,0.561],[0.71,0.38,0.184],[0.89,0.627,0.471],[0.431,0.196,0.09]];
 class PagePDF {
-  constructor(){ this.o = []; }
+  constructor(){ this.o = []; this.motif = null; }
+  disque(cx, cy, r, couleur){ const k = r * 0.5523, n = v => v.toFixed(2);
+    this.o.push(`${couleur} rg ${n(cx + r)} ${n(cy)} m ${n(cx + r)} ${n(cy + k)} ${n(cx + k)} ${n(cy + r)} ${n(cx)} ${n(cy + r)} c ${n(cx - k)} ${n(cy + r)} ${n(cx - r)} ${n(cy + k)} ${n(cx - r)} ${n(cy)} c ${n(cx - r)} ${n(cy - k)} ${n(cx - k)} ${n(cy - r)} ${n(cx)} ${n(cy - r)} c ${n(cx + k)} ${n(cy - r)} ${n(cx + r)} ${n(cy - k)} ${n(cx + r)} ${n(cy)} c f`); }
+  // Logo cuivré, centré sur cx, haut du tracé en yHaut, hauteur h (en points)
+  logo(cx, yHaut, h){ const e = h / 406, X = x => (cx + (x - 150) * e).toFixed(2), Y = y => (yHaut - (y - 42) * e).toFixed(2);
+    this.motif = [X(50), Y(50), X(250), Y(440)];
+    this.o.push(`q /Pattern CS /P1 SCN ${(16 * e).toFixed(2)} w 1 J 1 j ${X(LOGO.depart[0])} ${Y(LOGO.depart[1])} m ` + LOGO.traits.map(t => t.length === 2 ? `${X(t[0])} ${Y(t[1])} l` : `${X(t[0])} ${Y(t[1])} ${X(t[2])} ${Y(t[3])} ${X(t[4])} ${Y(t[5])} c`).join(' ') + ' S Q'); }
   texte(x, y, s, {taille = 10, gras = false, couleur = '0.11 0.16 0.17', align = 'left'} = {}){ if (s == null || s === '') return; const w = largeurTexte(s, taille, gras); const xx = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x; this.o.push(`BT /${gras ? 'F2' : 'F1'} ${taille} Tf ${couleur} rg ${xx.toFixed(2)} ${y.toFixed(2)} Td (${encPDF(s)}) Tj ET`); }
   ligne(x1, y1, x2, y2, ep = 0.6, couleur = '0.78 0.83 0.82'){ this.o.push(`${couleur} RG ${ep} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`); }
   rect(x, y, w, h, couleur){ this.o.push(`${couleur} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`); }
@@ -1465,9 +1474,12 @@ class PagePDF {
     const flux = this.o.join('\n');
     const d = new Date(); const dt = `D:${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>${this.motif ? ' /Pattern << /P1 7 0 R >>' : ''} >> /Contents 6 0 R >>`,
       '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
-      `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`, `<< /Title (${encPDF(titre)}) /Producer (Carnet de drainage) /CreationDate (${dt}) >>`];
+      `<< /Length ${flux.length} >>\nstream\n${flux}\nendstream`];
+    // Dégradé cuivré du logo : motif en dégradé linéaire, cinq tronçons entre six teintes
+    if (this.motif) objs.push(`<< /Type /Pattern /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [${this.motif.join(' ')}] /Extend [true true] /Function << /FunctionType 3 /Domain [0 1] /Bounds [0.2 0.4 0.6 0.8] /Encode [0 1 0 1 0 1 0 1 0 1] /Functions [${CUIVRE.slice(1).map((c, i) => `<< /FunctionType 2 /Domain [0 1] /C0 [${CUIVRE[i].join(' ')}] /C1 [${c.join(' ')}] /N 1 >>`).join(' ')}] >> >> >>`);
+    objs.push(`<< /Title (${encPDF(titre)}) /Producer (Carnet de drainage) /CreationDate (${dt}) >>`);
     let out = '%PDF-1.4\n%âãÏÓ\n'; const pos = [];
     objs.forEach((x, i) => { pos.push(out.length); out += `${i + 1} 0 obj\n${x}\nendobj\n`; });
     const xref = out.length;
@@ -1481,8 +1493,13 @@ function pdfFacture(f){
   const p = new PagePDF(), e = f.emetteur || {}, cl = f.client || {nom:'', adresse:[]};
   const M = 56, W = 595.28, H = 841.89, gris = '0.36 0.43 0.44', lagon = '0.17 0.42 0.44';
   let y = H - 66;
-  p.texte(M, y, `${e.nom || 'Nom du praticien'} EI`, {taille:13, gras:true}); y -= 17;
-  [e.commercial, ...String(e.adresse || '').split(/\r?\n/), e.tel ? `Tél. ${e.tel}` : '', e.email, e.siret ? `SIRET ${e.siret}` : ''].filter(x => x && x.trim()).forEach(l => { p.texte(M, y, l.trim(), {taille:9.5, couleur:gris}); y -= 13; });
+  // Logo en tête : pastille pétrole, tracé cuivré ; les coordonnées du praticien se placent à sa droite
+  const RL = 33, XT = M + 2 * RL + 16;
+  p.disque(M + RL, H - 50 - RL, RL, '0.059 0.227 0.235');
+  p.logo(M + RL + 2, H - 50 - RL + 25, 50);
+  p.texte(XT, y, `${e.nom || 'Nom du praticien'} EI`, {taille:13, gras:true}); y -= 17;
+  [e.commercial, ...String(e.adresse || '').split(/\r?\n/), e.tel ? `Tél. ${e.tel}` : '', e.email, e.siret ? `SIRET ${e.siret}` : ''].filter(x => x && x.trim()).forEach(l => { p.texte(XT, y, l.trim(), {taille:9.5, couleur:gris}); y -= 13; });
+  y = Math.min(y, H - 50 - 2 * RL - 6);
   p.texte(W - M, H - 72, 'Facture', {taille:26, gras:true, align:'right', couleur:lagon});
   p.texte(W - M, H - 92, `N° ${f.numero}`, {taille:11, gras:true, align:'right'});
   p.texte(W - M, H - 107, `Date : ${fmtDate(f.dateEmission)}`, {taille:10, align:'right', couleur:gris});
